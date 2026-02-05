@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { createItem, updateItem } from "@/server/actions/items";
 import { formatDOP } from "@/lib/money";
 import { DEFAULT_FOOD_IMAGE } from "@/components/public/constants";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import type { MenuItem, Category, Location } from "@prisma/client";
 
 type ItemWithRelations = MenuItem & {
@@ -153,10 +154,10 @@ function ItemForm({
           ))}
         </select>
       </div>
-      <Input
+      <ImageUploadField
+        currentImageUrl={editing?.imageUrl}
         name="imageUrl"
-        label="URL imagen"
-        defaultValue={editing?.imageUrl ?? ""}
+        label="Imagen del producto"
         labelClassName="text-antreva-navy"
       />
       <Input

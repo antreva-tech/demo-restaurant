@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { createItem, updateItem } from "@/server/actions/items";
 import { formatDOP } from "@/lib/money";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import type { MenuItem, Category, Location } from "@prisma/client";
 
 type ItemWithRelations = MenuItem & {
@@ -109,7 +110,7 @@ export function ItemsTable({
               ))}
             </select>
           </div>
-          <Input name="imageUrl" label="URL imagen" defaultValue={editing?.imageUrl ?? ""} labelClassName="text-antreva-navy" />
+          <ImageUploadField currentImageUrl={editing?.imageUrl} name="imageUrl" label="Imagen del producto" labelClassName="text-antreva-navy" />
           <Input name="tags" label="Etiquetas (separadas por coma)" defaultValue={editing?.tags?.join(", ") ?? ""} labelClassName="text-antreva-navy" />
           <label className="flex items-center gap-2">
             <input type="checkbox" name="isActive" defaultChecked={editing?.isActive ?? true} />
