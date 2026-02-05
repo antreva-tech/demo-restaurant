@@ -40,8 +40,25 @@ export function validateEnv(): void {
 export const authSecret =
   process.env.NEXTAUTH_SECRET?.trim() || process.env.AUTH_SECRET?.trim() || undefined;
 
-/** Canonical app URL for Auth.js (e.g. http://localhost:3000). */
-export const nextAuthUrl = process.env.NEXTAUTH_URL?.trim() || undefined;
+/**
+ * Ensures a valid URL for Auth.js. If only hostname is set (e.g. on Vercel), prepends https://.
+ * Also patches process.env.NEXTAUTH_URL so NextAuth and other libs that read it get a valid URL.
+ */
+function normalizeAuthUrl(raw: string | undefined): string | undefined {
+  const s = raw?.trim();
+  if (!s) return undefined;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
+const rawAuthUrl = process.env.NEXTAUTH_URL?.trim();
+const normalized = normalizeAuthUrl(rawAuthUrl);
+if (rawAuthUrl && normalized && rawAuthUrl !== normalized) {
+  process.env.NEXTAUTH_URL = normalized;
+}
+
+/** Canonical app URL for Auth.js (e.g. http://localhost:3000). Hostname-only is normalized to https://. */
+export const nextAuthUrl = normalized;
 
 /** Seed script: owner email (optional). */
 export const seedOwnerEmail = getOptional("SEED_OWNER_EMAIL", "owner@demo.com");
