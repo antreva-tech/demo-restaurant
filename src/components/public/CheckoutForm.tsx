@@ -31,6 +31,7 @@ export function CheckoutForm({
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [orderNumber, setOrderNumber] = useState<number | null>(null);
 
   if (cart.itemCount === 0 && status !== "success") {
     router.replace(`/r/${restaurantSlug}/l/${locationSlug}`);
@@ -58,6 +59,10 @@ export function CheckoutForm({
 
     if ("ok" in result && result.ok) {
       cart.clearCart();
+      setName("");
+      setPhone("");
+      setNotes("");
+      setOrderNumber("orderNumber" in result ? result.orderNumber : null);
       setStatus("success");
     } else {
       setStatus("error");
@@ -67,22 +72,32 @@ export function CheckoutForm({
 
   if (status === "success") {
     return (
-      <div className="mx-auto max-w-md px-4 py-12 text-center">
-        <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl">
-          ✓
+      <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
+        <div className="rounded-2xl border-2 border-green-200 bg-green-50/90 px-6 py-10 text-center shadow-sm">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-500 text-4xl text-white shadow-md">
+            ✓
+          </div>
+          <h2 className="text-2xl font-bold text-green-800 sm:text-3xl">
+            ¡Todo listo!
+          </h2>
+          <p className="mt-2 text-lg font-medium text-green-700">
+            Pedido recibido correctamente
+          </p>
+          {orderNumber != null && (
+            <p className="mt-3 rounded-lg bg-white/70 px-4 py-2 font-mono text-lg font-semibold text-green-800">
+              N.º de pedido: {orderNumber}
+            </p>
+          )}
+          <p className="mt-4 text-sm text-green-800/90">
+            Te contactaremos pronto para confirmar. Guarda este número de pedido por si necesitas consultar.
+          </p>
+          <Link
+            href={`/r/${restaurantSlug}/l/${locationSlug}`}
+            className="mt-8 inline-block min-h-[48px] rounded-xl bg-green-600 px-6 py-3 font-semibold text-white shadow transition hover:bg-green-700 active:opacity-90"
+          >
+            Volver al menú
+          </Link>
         </div>
-        <h2 className="text-2xl font-bold text-[#2d3748]">
-          Pedido recibido
-        </h2>
-        <p className="mt-3 text-[#718096]">
-          Te contactaremos pronto para confirmar tu pedido.
-        </p>
-        <Link
-          href={`/r/${restaurantSlug}/l/${locationSlug}`}
-          className="mt-8 inline-block min-h-[48px] rounded-xl bg-antreva-blue px-6 py-3 font-semibold text-white transition hover:bg-[#1557b0]"
-        >
-          Volver al menú
-        </Link>
       </div>
     );
   }

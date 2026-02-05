@@ -1,8 +1,39 @@
 "use server";
 
+import { Role } from "@prisma/client";
+import bcrypt from "bcrypt";
 import { prisma } from "@/lib/db";
-import { computeOrderTotals } from "@/lib/money";
+import { computeOrderTotalInclusive } from "@/lib/money";
 import { revalidatePath } from "next/cache";
+import { getNextOrderNumber } from "@/server/actions/orders";
+
+/** System email for the "Online" order user; unique per restaurant. */
+const onlineUserEmail = (restaurantId: string) => `online-${restaurantId}@system`;
+
+/**
+ * Returns the "Online" system user for the restaurant, creating it if missing.
+ * Used as employeeId for web orders; not used for login.
+ */
+async function getOrCreateOnlineUser(restaurantId: string) {
+  let user = await prisma.user.findFirst({
+    where: { restaurantId, name: "Online" },
+  });
+  if (user) return user;
+  const email = onlineUserEmail(restaurantId);
+  return prisma.user.upsert({
+    where: { email },
+    create: {
+      restaurantId,
+      name: "Online",
+      email,
+      passwordHash: await bcrypt.hash("no-login-system-user", 10),
+      role: Role.EMPLOYEE,
+      isActive: true,
+      employeeNumber: "0000",
+    },
+    update: {},
+  });
+}
 
 export interface CreateOnlineOrderItem {
   menuItemId: string;
@@ -22,7 +53,7 @@ export async function createOnlineOrder(params: {
   customerName: string;
   customerPhone: string;
   notes?: string | null;
-}): Promise<{ ok: true; orderId: string } | { error: string }> {
+}): Promise<{ ok: true; orderId: string; orderNumber: number } | { error: string }> {
   const { restaurantSlug, locationSlug, items, customerName, customerPhone, notes } = params;
 
   if (!items.length) return { error: "El carrito está vacío" };
@@ -41,10 +72,7 @@ export async function createOnlineOrder(params: {
   });
   if (!location) return { error: "Ubicación no encontrada" };
 
-  const onlineUser = await prisma.user.findFirst({
-    where: { restaurantId: restaurant.id, name: "Online" },
-  });
-  if (!onlineUser) return { error: "Configuración del restaurante incompleta" };
+  const onlineUser = await getOrCreateOnlineUser(restaurant.id);
 
   const orderItems = items.map((i) => ({
     menuItemId: i.menuItemId,
@@ -55,45 +83,45 @@ export async function createOnlineOrder(params: {
   }));
 
   const subtotalCents = orderItems.reduce((s, i) => s + i.lineTotalCents, 0);
-  const { taxCents, serviceChargeCents, totalCents } = computeOrderTotals(
-    subtotalCents,
-    restaurant.taxRateBps,
-    restaurant.serviceChargeBps,
-    0
-  );
+  const { taxCents, serviceChargeCents, totalCents } = computeOrderTotalInclusive(subtotalCents, 0);
 
-  const order = await prisma.order.create({
-    data: {
-      restaurantId: restaurant.id,
-      locationId: location.id,
-      employeeId: onlineUser.id,
-      status: "OPEN",
-      notes: notes?.trim() || null,
-      customerName: name,
-      customerPhone: phone,
-      subtotalCents,
-      taxCents,
-      serviceChargeCents,
-      discountCents: 0,
-      totalCents,
-      items: {
-        create: orderItems.map((i) => ({
-          menuItemId: i.menuItemId,
-          nameSnapshot: i.nameSnapshot,
-          unitPriceCentsSnapshot: i.unitPriceCentsSnapshot,
-          quantity: i.quantity,
-          lineTotalCents: i.lineTotalCents,
-          notes: null,
-        })),
+  const order = await prisma.$transaction(async (tx) => {
+    const orderNumber = await getNextOrderNumber(tx, restaurant.id);
+    return tx.order.create({
+      data: {
+        restaurantId: restaurant.id,
+        locationId: location.id,
+        employeeId: onlineUser.id,
+        orderNumber,
+        status: "OPEN",
+        notes: notes?.trim() || null,
+        customerName: name,
+        customerPhone: phone,
+        subtotalCents,
+        taxCents,
+        serviceChargeCents,
+        discountCents: 0,
+        totalCents,
+        items: {
+          create: orderItems.map((i) => ({
+            menuItemId: i.menuItemId,
+            nameSnapshot: i.nameSnapshot,
+            unitPriceCentsSnapshot: i.unitPriceCentsSnapshot,
+            quantity: i.quantity,
+            lineTotalCents: i.lineTotalCents,
+            notes: null,
+          })),
+        },
       },
-    },
+    });
   });
 
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
 
-  await notifyOrderCreated({
+  const notificationPayload = {
     orderId: order.id,
+    orderNumber: order.orderNumber,
     restaurantName: restaurant.name,
     locationName: location.name,
     customerName: name,
@@ -101,9 +129,12 @@ export async function createOnlineOrder(params: {
     notes: notes?.trim() || null,
     items: orderItems,
     totalCents,
-  });
+  };
 
-  return { ok: true, orderId: order.id };
+  await notifyOrderCreated(notificationPayload);
+  await sendWhatsAppOrderNotification(notificationPayload);
+
+  return { ok: true, orderId: order.id, orderNumber: order.orderNumber };
 }
 
 /**
@@ -111,6 +142,7 @@ export async function createOnlineOrder(params: {
  */
 async function notifyOrderCreated(payload: {
   orderId: string;
+  orderNumber: number;
   restaurantName: string;
   locationName: string;
   customerName: string;
@@ -123,7 +155,7 @@ async function notifyOrderCreated(payload: {
   const resendKey = process.env.RESEND_API_KEY?.trim();
 
   const lines = [
-    `Nuevo pedido en línea #${payload.orderId.slice(0, 8)}`,
+    `Nuevo pedido en línea #${payload.orderNumber}`,
     "",
     `Restaurante: ${payload.restaurantName}`,
     `Ubicación: ${payload.locationName}`,
@@ -165,5 +197,70 @@ async function notifyOrderCreated(payload: {
     }
   } else {
     console.info("Online order created (no email sent):", text);
+  }
+}
+
+/**
+ * Sends the order summary to the restaurant via WhatsApp (Twilio).
+ * No-op if TWILIO_* or NOTIFICATION_WHATSAPP_TO are not set.
+ */
+async function sendWhatsAppOrderNotification(payload: {
+  orderNumber: number;
+  restaurantName: string;
+  locationName: string;
+  customerName: string;
+  customerPhone: string;
+  notes: string | null;
+  items: { nameSnapshot: string; quantity: number; lineTotalCents: number }[];
+  totalCents: number;
+}) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+  const from = process.env.TWILIO_WHATSAPP_FROM?.trim();
+  const toRaw = process.env.NOTIFICATION_WHATSAPP_TO?.trim();
+  if (!accountSid || !authToken || !from || !toRaw) return;
+
+  const to = toRaw.startsWith("whatsapp:") ? toRaw : `whatsapp:+${toRaw.replace(/\D/g, "")}`;
+  const fromNorm = from.startsWith("whatsapp:") ? from : `whatsapp:+${from.replace(/\D/g, "")}`;
+
+  const lines = [
+    `🛒 *Nuevo pedido #${payload.orderNumber}*`,
+    "",
+    `📍 ${payload.restaurantName} · ${payload.locationName}`,
+    `👤 ${payload.customerName}`,
+    `📞 ${payload.customerPhone}`,
+    payload.notes ? `📝 ${payload.notes}` : null,
+    "",
+    "Pedido:",
+    ...payload.items.map(
+      (i) => `  • ${i.quantity}x ${i.nameSnapshot} — ${(i.lineTotalCents / 100).toFixed(2)} DOP`
+    ),
+    "",
+    `*Total: ${(payload.totalCents / 100).toFixed(2)} DOP*`,
+  ].filter(Boolean);
+
+  const body = lines.join("\n");
+
+  try {
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        To: to,
+        From: fromNorm,
+        Body: body,
+      }).toString(),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn("Twilio WhatsApp failed:", res.status, err);
+    }
+  } catch (e) {
+    console.warn("WhatsApp order notification failed:", e);
   }
 }

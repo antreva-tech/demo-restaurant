@@ -26,3 +26,27 @@ export async function getOrdersForAdmin(
     take: 500,
   });
 }
+
+/**
+ * Fetches a single order with items for admin invoice/edit view.
+ * Ensures the order belongs to the given restaurant.
+ */
+export async function getOrderByIdForAdmin(restaurantId: string, orderId: string) {
+  return prisma.order.findFirst({
+    where: { id: orderId, restaurantId },
+    include: {
+      location: {
+        include: {
+          menuItems: {
+            where: { isActive: true },
+            select: { id: true, name: true, priceCents: true },
+            orderBy: { name: "asc" },
+          },
+        },
+      },
+      employee: { select: { id: true, name: true, employeeNumber: true } },
+      items: { orderBy: { id: "asc" } },
+      restaurant: { select: { taxRateBps: true, serviceChargeBps: true } },
+    },
+  });
+}

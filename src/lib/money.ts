@@ -39,3 +39,18 @@ export function computeOrderTotals(
   const totalCents = subtotalCents + taxCents + serviceChargeCents - discountCents;
   return { taxCents, serviceChargeCents, totalCents };
 }
+
+/**
+ * Order total when prices already include tax (no extra tax or service added).
+ * totalCents = subtotalCents - discountCents. Used so displayed total equals sum of line items minus discount.
+ */
+export function computeOrderTotalInclusive(
+  subtotalCents: number,
+  discountCents: number = 0
+): { taxCents: number; serviceChargeCents: number; totalCents: number } {
+  return {
+    taxCents: 0,
+    serviceChargeCents: 0,
+    totalCents: Math.max(0, subtotalCents - discountCents),
+  };
+}

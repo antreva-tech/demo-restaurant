@@ -136,6 +136,7 @@ model Order {
   restaurantId       String
   locationId         String
   employeeId         String
+  orderNumber        Int           /** Simple unique number per restaurant (e.g. 1, 2, 3) for display. */
   status             OrderStatus   @default(OPEN)
   notes              String?
   customerName       String?
@@ -157,6 +158,7 @@ model Order {
   employee   User        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   items      OrderItem[]
 
+  @@unique([restaurantId, orderNumber])
   @@index([restaurantId])
   @@index([locationId])
   @@index([employeeId])

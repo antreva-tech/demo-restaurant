@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { getOrdersForAdmin } from "@/server/queries/orders";
 import { getLocationsForAdmin } from "@/server/queries/admin";
 import { Card } from "@/components/ui/Card";
-import { formatDOP } from "@/lib/money";
 import { OrdersToolbar } from "@/components/admin/OrdersToolbar";
+import { OrdersTableWithModal } from "@/components/admin/OrdersTableWithModal";
 import { Suspense } from "react";
 
 export default async function AdminOrdersPage({
@@ -39,6 +39,7 @@ export default async function AdminOrdersPage({
     const q = params.search.trim().toLowerCase();
     orders = orders.filter(
       (o) =>
+        String((o as { orderNumber?: number }).orderNumber ?? "").includes(q) ||
         o.id.toLowerCase().includes(q) ||
         (o.employee?.name?.toLowerCase().includes(q) ?? false) ||
         (o.employee?.employeeNumber?.toLowerCase().includes(q) ?? false) ||
@@ -58,52 +59,7 @@ export default async function AdminOrdersPage({
             locations={locations}
           />
         </Suspense>
-        {orders.length === 0 ? (
-          <p className="text-antreva-slate">No hay órdenes.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b text-antreva-navy">
-                  <th className="pb-2 pr-4">ID</th>
-                  <th className="pb-2 pr-4">Fecha</th>
-                  <th className="pb-2 pr-4">Ubicación</th>
-                  <th className="pb-2 pr-4">Origen</th>
-                  <th className="pb-2 pr-4">Cliente</th>
-                  <th className="pb-2 pr-4">Total</th>
-                  <th className="pb-2 pr-4">Pago</th>
-                  <th className="pb-2 pr-4">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-b text-antreva-navy">
-                    <td className="py-2 pr-4 font-mono text-xs text-antreva-navy">{o.id.slice(0, 8)}</td>
-                    <td className="py-2 pr-4 text-antreva-navy">
-                      {new Date(o.createdAt).toLocaleString("es-DO")}
-                    </td>
-                    <td className="py-2 pr-4 text-antreva-navy">{o.location?.name ?? "—"}</td>
-                    <td className="py-2 pr-4 text-antreva-navy">
-                      {o.employee?.name === "Online"
-                        ? "Online"
-                        : o.employee
-                          ? `${o.employee.name}${o.employee.employeeNumber ? ` (${o.employee.employeeNumber})` : ""}`
-                          : "—"}
-                    </td>
-                    <td className="py-2 pr-4 text-antreva-navy">
-                      {o.employee?.name === "Online" && (o.customerName || o.customerPhone)
-                        ? [o.customerName, o.customerPhone].filter(Boolean).join(" · ")
-                        : "—"}
-                    </td>
-                    <td className="py-2 pr-4 text-antreva-navy">{formatDOP(o.totalCents)}</td>
-                    <td className="py-2 pr-4 text-antreva-navy">{o.paymentMethod ?? "—"}</td>
-                    <td className="py-2 pr-4 text-antreva-navy">{o.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <OrdersTableWithModal orders={orders} />
       </Card>
     </div>
   );

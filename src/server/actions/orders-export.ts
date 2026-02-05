@@ -30,6 +30,7 @@ export async function getOrdersCsv(params: {
     const q = params.search.trim().toLowerCase();
     orders = orders.filter(
       (o) =>
+        String((o as { orderNumber?: number }).orderNumber ?? "").includes(q) ||
         o.id.toLowerCase().includes(q) ||
         (o.employee?.name?.toLowerCase().includes(q) ?? false) ||
         (o.employee?.employeeNumber?.toLowerCase().includes(q) ?? false) ||
@@ -38,6 +39,7 @@ export async function getOrdersCsv(params: {
   }
 
   const headers = [
+    "numero",
     "id",
     "fecha",
     "ubicación",
@@ -48,6 +50,7 @@ export async function getOrdersCsv(params: {
   ].join(",");
   const rows = orders.map((o) =>
     [
+      (o as { orderNumber?: number }).orderNumber ?? "",
       o.id,
       o.createdAt.toISOString(),
       o.location?.name ?? "",

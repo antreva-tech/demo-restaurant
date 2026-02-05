@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { getPosMenu } from "@/server/actions/pos";
 import { createOrderAndPay } from "@/server/actions/orders";
-import { formatDOP, computeOrderTotals } from "@/lib/money";
+import { formatDOP, computeOrderTotalInclusive } from "@/lib/money";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import type { Category, MenuItem, Location } from "@prisma/client";
@@ -87,12 +87,7 @@ export function PosBuilder({ locations, restaurant }: PosBuilderProps) {
   }
 
   const subtotalCents = order.reduce((s, l) => s + l.lineTotalCents, 0);
-  const { taxCents, serviceChargeCents, totalCents } = computeOrderTotals(
-    subtotalCents,
-    restaurant.taxRateBps,
-    restaurant.serviceChargeBps,
-    0
-  );
+  const { totalCents } = computeOrderTotalInclusive(subtotalCents, 0);
   const cashReceivedCents = Math.round(parseFloat(cashReceived || "0") * 100);
   const changeCents = (paymentMethod === "CASH" || paymentMethod === "MIXED") ? Math.max(0, cashReceivedCents - totalCents) : 0;
 
@@ -201,11 +196,6 @@ export function PosBuilder({ locations, restaurant }: PosBuilderProps) {
         </div>
         <div className="border-t p-4">
           <div className="space-y-1 text-sm">
-            <div className="flex justify-between"><span>Subtotal</span><span>{formatDOP(subtotalCents)}</span></div>
-            <div className="flex justify-between"><span>ITBIS</span><span>{formatDOP(taxCents)}</span></div>
-            {serviceChargeCents > 0 && (
-              <div className="flex justify-between"><span>Servicio</span><span>{formatDOP(serviceChargeCents)}</span></div>
-            )}
             <div className="flex justify-between font-semibold"><span>Total</span><span>{formatDOP(totalCents)}</span></div>
           </div>
           <Button

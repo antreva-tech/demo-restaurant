@@ -23,8 +23,9 @@ export function Input({ label, error, className, labelClassName, id, ...props }:
       <input
         id={inputId}
         className={clsx(
-          "w-full rounded-lg border px-3 py-2 text-antreva-navy",
-          error ? "border-red-500" : "border-gray-300",
+          "w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-antreva-navy shadow-sm transition-shadow",
+          "focus:outline-none focus:ring-2 focus:ring-antreva-blue/20 focus:border-antreva-blue",
+          error ? "border-red-500 focus:ring-red-500/20 focus:border-red-500" : "",
           className
         )}
         {...props}

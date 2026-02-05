@@ -52,7 +52,7 @@ export function OrdersToolbar({ locationId, locations }: OrdersToolbarProps) {
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
           type="search"
-          placeholder="Buscar (ID, empleado, fecha)"
+          placeholder="Buscar (n.º, empleado, cliente, fecha)"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-antreva-navy w-56 placeholder:text-antreva-slate"

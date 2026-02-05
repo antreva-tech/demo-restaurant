@@ -8,9 +8,11 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  /** Optional class for the dialog content box (e.g. max-w-2xl for wider modals). */
+  contentClassName?: string;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, contentClassName }: ModalProps) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
     return () => {
@@ -24,7 +26,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
       <div
-        className="relative max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-white shadow-xl"
+        className={`relative max-h-[90vh] w-full overflow-auto rounded-xl bg-white shadow-xl ${contentClassName ?? "max-w-lg"}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
