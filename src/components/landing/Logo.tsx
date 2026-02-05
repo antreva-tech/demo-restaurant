@@ -14,14 +14,14 @@ export function Logo({ className, href = "/" }: { className?: string; href?: str
     <img
       src={siteConfig.logoUrl}
       alt={siteConfig.siteName}
-      className="h-12 w-auto max-w-[180px] object-contain object-left"
-      width={180}
-      height={48}
+      className="h-16 w-16 object-contain object-left"
+      width={64}
+      height={64}
     />
   ) : (
     <span className="flex items-center gap-2">
       <span
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-menu-gold text-xl font-bold text-menu-brown"
+        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-menu-gold text-2xl font-bold text-menu-brown"
         aria-hidden
       >
         {siteConfig.siteName.charAt(0)}

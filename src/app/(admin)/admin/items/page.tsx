@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getItemsForAdmin, getCategoriesForAdmin, getLocationsForAdmin } from "@/server/queries/admin";
 import { Card } from "@/components/ui/Card";
-import { ItemsTable } from "@/components/admin/ItemsTable";
+import { ItemsGrid } from "@/components/admin/ItemsGrid";
 
 export default async function AdminItemsPage() {
   const session = await auth();
@@ -17,12 +17,11 @@ export default async function AdminItemsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Productos</h1>
+      <h1 className="text-2xl font-semibold text-antreva-navy">Productos</h1>
       <Card>
-        {items.length === 0 ? (
-          <p className="text-gray-500">No hay productos. Agregue uno.</p>
-        ) : (
-          <ItemsTable items={items} categories={categories} locations={locations} />
+        <ItemsGrid items={items} categories={categories} locations={locations} />
+        {items.length === 0 && (
+          <p className="mt-4 text-center text-antreva-slate">No hay productos. Use el botón para agregar uno.</p>
         )}
       </Card>
     </div>

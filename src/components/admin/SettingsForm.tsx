@@ -22,9 +22,10 @@ export function SettingsForm({ restaurant }: { restaurant: Restaurant }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
-      <Input name="name" label="Nombre del restaurant" defaultValue={restaurant.name} />
+      <Input name="name" label="Nombre del restaurant" defaultValue={restaurant.name} labelClassName="text-antreva-navy" />
       <Input
         name="posInactivityTimeoutMinutes"
+        labelClassName="text-antreva-navy"
         label="Cierre de sesión por inactividad (Caja) — minutos"
         type="number"
         min={1}
@@ -32,7 +33,7 @@ export function SettingsForm({ restaurant }: { restaurant: Restaurant }) {
         defaultValue={restaurant.posInactivityTimeoutMinutes}
         title="Si el empleado no tiene actividad en la caja durante este tiempo, se cierra la sesión."
       />
-      <Button type="submit" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
+      <Button type="submit" variant="gold" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
     </form>
   );
 }

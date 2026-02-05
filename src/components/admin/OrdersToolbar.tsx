@@ -55,11 +55,11 @@ export function OrdersToolbar({ locationId, locations }: OrdersToolbarProps) {
           placeholder="Buscar (ID, empleado, fecha)"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-56"
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-antreva-navy w-56 placeholder:text-antreva-slate"
         />
-        <Button type="submit" size="sm">Buscar</Button>
+        <Button type="submit" size="sm" variant="gold">Buscar</Button>
       </form>
-      <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
+      <Button variant="goldSecondary" size="sm" onClick={handleExport} disabled={exporting}>
         {exporting ? "Exportando…" : "Exportar CSV"}
       </Button>
     </div>

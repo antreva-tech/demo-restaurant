@@ -26,8 +26,16 @@ export function DashboardCharts({ salesByDay }: DashboardChartsProps) {
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `RD$${v}`} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: "#0B132B" }}
+            axisLine={{ stroke: "#0B132B" }}
+          />
+          <YAxis
+            tick={{ fontSize: 12, fill: "#0B132B" }}
+            tickFormatter={(v) => `RD$${v}`}
+            axisLine={{ stroke: "#0B132B" }}
+          />
           <Tooltip
             formatter={(value: number) => [formatDOP(value * 100), "Ventas"]}
             labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}

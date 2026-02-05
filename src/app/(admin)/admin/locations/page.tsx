@@ -13,10 +13,10 @@ export default async function AdminLocationsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Ubicaciones</h1>
+      <h1 className="text-2xl font-semibold text-antreva-navy">Ubicaciones</h1>
       <Card>
         {locations.length === 0 ? (
-          <p className="text-gray-500">No hay ubicaciones. Agregue una.</p>
+          <p className="text-antreva-slate">No hay ubicaciones. Agregue una.</p>
         ) : (
           <LocationsTable locations={locations} />
         )}

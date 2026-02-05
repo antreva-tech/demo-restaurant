@@ -50,7 +50,7 @@ export default async function AdminOrdersPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Órdenes</h1>
+      <h1 className="text-2xl font-semibold text-antreva-navy">Órdenes</h1>
       <Card>
         <Suspense fallback={null}>
           <OrdersToolbar
@@ -59,12 +59,12 @@ export default async function AdminOrdersPage({
           />
         </Suspense>
         {orders.length === 0 ? (
-          <p className="text-gray-500">No hay órdenes.</p>
+          <p className="text-antreva-slate">No hay órdenes.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b text-gray-600">
+                <tr className="border-b text-antreva-navy">
                   <th className="pb-2 pr-4">ID</th>
                   <th className="pb-2 pr-4">Fecha</th>
                   <th className="pb-2 pr-4">Ubicación</th>
@@ -77,27 +77,27 @@ export default async function AdminOrdersPage({
               </thead>
               <tbody>
                 {orders.map((o) => (
-                  <tr key={o.id} className="border-b">
-                    <td className="py-2 pr-4 font-mono text-xs">{o.id.slice(0, 8)}</td>
-                    <td className="py-2 pr-4 text-gray-600">
+                  <tr key={o.id} className="border-b text-antreva-navy">
+                    <td className="py-2 pr-4 font-mono text-xs text-antreva-navy">{o.id.slice(0, 8)}</td>
+                    <td className="py-2 pr-4 text-antreva-navy">
                       {new Date(o.createdAt).toLocaleString("es-DO")}
                     </td>
-                    <td className="py-2 pr-4">{o.location?.name ?? "—"}</td>
-                    <td className="py-2 pr-4">
+                    <td className="py-2 pr-4 text-antreva-navy">{o.location?.name ?? "—"}</td>
+                    <td className="py-2 pr-4 text-antreva-navy">
                       {o.employee?.name === "Online"
                         ? "Online"
                         : o.employee
                           ? `${o.employee.name}${o.employee.employeeNumber ? ` (${o.employee.employeeNumber})` : ""}`
                           : "—"}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="py-2 pr-4 text-antreva-navy">
                       {o.employee?.name === "Online" && (o.customerName || o.customerPhone)
                         ? [o.customerName, o.customerPhone].filter(Boolean).join(" · ")
                         : "—"}
                     </td>
-                    <td className="py-2 pr-4">{formatDOP(o.totalCents)}</td>
-                    <td className="py-2 pr-4">{o.paymentMethod ?? "—"}</td>
-                    <td className="py-2 pr-4">{o.status}</td>
+                    <td className="py-2 pr-4 text-antreva-navy">{formatDOP(o.totalCents)}</td>
+                    <td className="py-2 pr-4 text-antreva-navy">{o.paymentMethod ?? "—"}</td>
+                    <td className="py-2 pr-4 text-antreva-navy">{o.status}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,11 +1,18 @@
 import { clsx } from "clsx";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "danger" | "ghost";
+  variant?: "primary" | "secondary" | "danger" | "ghost" | "gold" | "goldSecondary" | "goldGhost";
   size?: "sm" | "md" | "lg";
   children: React.ReactNode;
   className?: string;
 }
+
+/** Gold variants match main site / restaurant branding (menu-gold, menu-brown). */
+const goldStyles = {
+  gold: "bg-menu-gold text-menu-brown hover:bg-menu-gold-hover",
+  goldSecondary: "border border-menu-gold/60 bg-transparent text-menu-brown hover:bg-menu-gold/15",
+  goldGhost: "text-menu-brown hover:bg-menu-gold/25",
+};
 
 export function Button({
   variant = "primary",
@@ -23,6 +30,9 @@ export function Button({
         variant === "secondary" && "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
         variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
         variant === "ghost" && "text-gray-700 hover:bg-gray-100",
+        variant === "gold" && goldStyles.gold,
+        variant === "goldSecondary" && goldStyles.goldSecondary,
+        variant === "goldGhost" && goldStyles.goldGhost,
         size === "sm" && "px-2 py-1 text-sm",
         size === "md" && "px-4 py-2 text-sm",
         size === "lg" && "px-4 py-3 text-base",

@@ -13,7 +13,7 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Usuarios</h1>
+      <h1 className="text-2xl font-semibold text-antreva-navy">Usuarios</h1>
       <Card>
         <UsersTable users={users} />
       </Card>

@@ -16,10 +16,10 @@ export default async function AdminCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Categorías</h1>
+      <h1 className="text-2xl font-semibold text-antreva-navy">Categorías</h1>
       <Card>
         {categories.length === 0 ? (
-          <p className="text-gray-500">No hay categorías. Agregue una.</p>
+          <p className="text-antreva-slate">No hay categorías. Agregue una.</p>
         ) : (
           <CategoriesTable categories={categories} locations={locations} />
         )}

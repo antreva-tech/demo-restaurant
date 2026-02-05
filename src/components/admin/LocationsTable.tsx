@@ -36,7 +36,7 @@ export function LocationsTable({ locations }: { locations: Location[] }) {
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b text-gray-600">
+            <tr className="border-b text-antreva-navy">
               <th className="pb-2 pr-4">Nombre</th>
               <th className="pb-2 pr-4">Slug</th>
               <th className="pb-2 pr-4">Dirección</th>
@@ -46,20 +46,20 @@ export function LocationsTable({ locations }: { locations: Location[] }) {
           </thead>
           <tbody>
             {locations.map((loc) => (
-              <tr key={loc.id} className="border-b">
+              <tr key={loc.id} className="border-b text-antreva-navy">
                 <td className="py-2 pr-4 font-medium">{loc.name}</td>
-                <td className="py-2 pr-4 text-gray-600">{loc.slug}</td>
-                <td className="py-2 pr-4 text-gray-600">{loc.address ?? "—"}</td>
+                <td className="py-2 pr-4 text-antreva-navy">{loc.slug}</td>
+                <td className="py-2 pr-4 text-antreva-navy">{loc.address ?? "—"}</td>
                 <td className="py-2 pr-4">
                   {loc.isActive ? (
                     <span className="text-green-600">Activa</span>
                   ) : (
-                    <span className="text-gray-400">Inactiva</span>
+                    <span className="text-antreva-slate">Inactiva</span>
                   )}
                 </td>
                 <td className="py-2">
                   <Button
-                    variant="ghost"
+                    variant="goldGhost"
                     size="sm"
                     onClick={() => {
                       setEditing(loc);
@@ -74,7 +74,7 @@ export function LocationsTable({ locations }: { locations: Location[] }) {
           </tbody>
         </table>
       </div>
-      <Button className="mt-4" onClick={() => { setEditing(null); setOpen(true); }}>
+      <Button className="mt-4" variant="gold" onClick={() => { setEditing(null); setOpen(true); }}>
         Agregar ubicación
       </Button>
 
@@ -89,6 +89,7 @@ export function LocationsTable({ locations }: { locations: Location[] }) {
             label="Nombre"
             defaultValue={editing?.name}
             required
+            labelClassName="text-antreva-navy"
           />
           <Input
             name="slug"
@@ -96,11 +97,13 @@ export function LocationsTable({ locations }: { locations: Location[] }) {
             defaultValue={editing?.slug}
             required
             placeholder="ej: principal"
+            labelClassName="text-antreva-navy"
           />
           <Input
             name="address"
             label="Dirección"
             defaultValue={editing?.address ?? ""}
+            labelClassName="text-antreva-navy"
           />
           <label className="flex items-center gap-2">
             <input
@@ -108,13 +111,13 @@ export function LocationsTable({ locations }: { locations: Location[] }) {
               name="isActive"
               defaultChecked={editing?.isActive ?? true}
             />
-            <span className="text-sm">Activa</span>
+            <span className="text-sm text-antreva-navy">Activa</span>
           </label>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+            <Button type="button" variant="goldSecondary" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" variant="gold" disabled={loading}>
               {loading ? "Guardando…" : "Guardar"}
             </Button>
           </div>

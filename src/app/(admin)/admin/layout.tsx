@@ -3,62 +3,54 @@ import { redirect } from "next/navigation";
 import { canAccessAdmin } from "@/lib/rbac";
 import Link from "next/link";
 import { logout } from "@/server/actions/auth";
+import { Logo } from "@/components/landing/Logo";
 
+/**
+ * Admin sidebar: logo on top, nav links and user/logout at bottom. Styled to match main site (menu-brown, menu-cream, menu-gold).
+ */
 async function AdminNav() {
   const session = await auth();
   const ok = canAccessAdmin(session);
   if (!ok) redirect("/login");
 
+  const linkClass =
+    "rounded-lg px-3 py-2 text-menu-cream/95 hover:bg-menu-gold/25 hover:text-menu-cream transition-colors";
+
   return (
-    <aside className="w-56 border-r bg-white p-4">
-      <nav className="flex flex-col gap-1">
-        <Link
-          href="/admin"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+    <aside className="flex w-56 flex-col border-r border-menu-gold/40 bg-menu-brown">
+      <div className="border-b border-menu-gold/40 p-4">
+        <Logo href="/admin" className="min-h-16 min-w-16 text-menu-cream" />
+      </div>
+      <nav className="flex flex-1 flex-col gap-0.5 p-3">
+        <Link href="/admin" className={linkClass}>
           Administración
         </Link>
-        <Link
-          href="/admin/locations"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+        <Link href="/admin/locations" className={linkClass}>
           Ubicaciones
         </Link>
-        <Link
-          href="/admin/categories"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+        <Link href="/admin/categories" className={linkClass}>
           Categorías
         </Link>
-        <Link
-          href="/admin/items"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+        <Link href="/admin/items" className={linkClass}>
           Productos
         </Link>
-        <Link
-          href="/admin/users"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+        <Link href="/admin/users" className={linkClass}>
           Usuarios
         </Link>
-        <Link
-          href="/admin/orders"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+        <Link href="/admin/orders" className={linkClass}>
           Órdenes
         </Link>
-        <Link
-          href="/admin/settings"
-          className="rounded-lg px-3 py-2 text-gray-700 hover:bg-gray-100"
-        >
+        <Link href="/admin/settings" className={linkClass}>
           Configuración
         </Link>
       </nav>
-      <div className="mt-auto border-t pt-4">
-        <p className="truncate px-3 text-sm text-gray-500">{session?.user?.email}</p>
+      <div className="mt-auto border-t border-menu-gold/40 p-3">
+        <p className="truncate px-3 text-sm text-menu-cream-muted">{session?.user?.email}</p>
         <form action={logout}>
-          <button type="submit" className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-100">
+          <button
+            type="submit"
+            className={`mt-2 w-full ${linkClass} text-left text-sm`}
+          >
             Cerrar sesión
           </button>
         </form>
@@ -67,13 +59,16 @@ async function AdminNav() {
   );
 }
 
+/**
+ * Admin layout: branded sidebar + main content on cream background to match main site.
+ */
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-menu-cream">
       <AdminNav />
       <main className="flex-1 p-6">{children}</main>
     </div>

@@ -51,7 +51,7 @@ export function ItemsTable({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b text-gray-600">
+            <tr className="border-b text-antreva-navy">
               <th className="pb-2 pr-4">Nombre</th>
               <th className="pb-2 pr-4">Categoría</th>
               <th className="pb-2 pr-4">Precio</th>
@@ -61,13 +61,13 @@ export function ItemsTable({
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b">
+              <tr key={item.id} className="border-b text-antreva-navy">
                 <td className="py-2 pr-4 font-medium">{item.name}</td>
-                <td className="py-2 pr-4 text-gray-600">{item.category.name}</td>
+                <td className="py-2 pr-4 text-antreva-navy">{item.category.name}</td>
                 <td className="py-2 pr-4">{formatDOP(item.priceCents)}</td>
                 <td className="py-2 pr-4">{item.isAvailable ? "Sí" : "No"}</td>
                 <td className="py-2">
-                  <Button variant="ghost" size="sm" onClick={() => { setEditing(item); setOpen(true); }}>
+                  <Button variant="goldGhost" size="sm" onClick={() => { setEditing(item); setOpen(true); }}>
                     Editar
                   </Button>
                 </td>
@@ -76,14 +76,14 @@ export function ItemsTable({
           </tbody>
         </table>
       </div>
-      <Button className="mt-4" onClick={() => { setEditing(null); setOpen(true); }}>
+      <Button className="mt-4" variant="gold" onClick={() => { setEditing(null); setOpen(true); }}>
         Agregar producto
       </Button>
 
       <Modal open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? "Editar producto" : "Nuevo producto"}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input name="name" label="Nombre" defaultValue={editing?.name} required />
-          <Input name="description" label="Descripción" defaultValue={editing?.description ?? ""} />
+          <Input name="name" label="Nombre" defaultValue={editing?.name} required labelClassName="text-antreva-navy" />
+          <Input name="description" label="Descripción" defaultValue={editing?.description ?? ""} labelClassName="text-antreva-navy" />
           <Input
             name="priceCents"
             label="Precio (RD$)"
@@ -91,36 +91,37 @@ export function ItemsTable({
             step="0.01"
             defaultValue={editing ? editing.priceCents / 100 : ""}
             required
+            labelClassName="text-antreva-navy"
           />
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Ubicación</label>
-            <select name="locationId" required defaultValue={editing?.locationId} className="w-full rounded-lg border border-gray-300 px-3 py-2">
+            <label className="mb-1 block text-sm font-medium text-antreva-navy">Ubicación</label>
+            <select name="locationId" required defaultValue={editing?.locationId} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-antreva-navy">
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>{loc.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Categoría</label>
-            <select name="categoryId" required defaultValue={editing?.categoryId} className="w-full rounded-lg border border-gray-300 px-3 py-2">
+            <label className="mb-1 block text-sm font-medium text-antreva-navy">Categoría</label>
+            <select name="categoryId" required defaultValue={editing?.categoryId} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-antreva-navy">
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
           </div>
-          <Input name="imageUrl" label="URL imagen" defaultValue={editing?.imageUrl ?? ""} />
-          <Input name="tags" label="Etiquetas (separadas por coma)" defaultValue={editing?.tags?.join(", ") ?? ""} />
+          <Input name="imageUrl" label="URL imagen" defaultValue={editing?.imageUrl ?? ""} labelClassName="text-antreva-navy" />
+          <Input name="tags" label="Etiquetas (separadas por coma)" defaultValue={editing?.tags?.join(", ") ?? ""} labelClassName="text-antreva-navy" />
           <label className="flex items-center gap-2">
             <input type="checkbox" name="isActive" defaultChecked={editing?.isActive ?? true} />
-            <span className="text-sm">Activo</span>
+            <span className="text-sm text-antreva-navy">Activo</span>
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" name="isAvailable" defaultChecked={editing?.isAvailable ?? true} />
-            <span className="text-sm">Disponible en menú</span>
+            <span className="text-sm text-antreva-navy">Disponible en menú</span>
           </label>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button type="submit" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
+            <Button type="button" variant="goldSecondary" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button type="submit" variant="gold" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
           </div>
         </form>
       </Modal>

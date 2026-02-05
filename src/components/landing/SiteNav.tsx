@@ -12,7 +12,7 @@ export function SiteNav() {
   return (
     <nav className="sticky top-0 z-50 border-b-2 border-menu-gold/40 bg-menu-brown backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Logo className="min-h-[44px] min-w-[44px] text-menu-cream" />
+        <Logo className="min-h-16 min-w-16 text-menu-cream" />
         <div className="flex items-center gap-2 sm:gap-4">
           <Link
             href={siteConfig.menuPath}

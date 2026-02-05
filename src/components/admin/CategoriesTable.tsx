@@ -43,7 +43,7 @@ export function CategoriesTable({
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b text-gray-600">
+            <tr className="border-b text-antreva-navy">
               <th className="pb-2 pr-4">Nombre</th>
               <th className="pb-2 pr-4">Ubicación</th>
               <th className="pb-2 pr-4">Orden</th>
@@ -53,15 +53,15 @@ export function CategoriesTable({
           </thead>
           <tbody>
             {categories.map((cat) => (
-              <tr key={cat.id} className="border-b">
+              <tr key={cat.id} className="border-b text-antreva-navy">
                 <td className="py-2 pr-4 font-medium">{cat.name}</td>
-                <td className="py-2 pr-4 text-gray-600">{cat.location.name}</td>
+                <td className="py-2 pr-4 text-antreva-navy">{cat.location.name}</td>
                 <td className="py-2 pr-4">{cat.sortOrder}</td>
                 <td className="py-2 pr-4">
                   {cat.isActive ? "Activa" : "Inactiva"}
                 </td>
                 <td className="py-2">
-                  <Button variant="ghost" size="sm" onClick={() => { setEditing(cat); setOpen(true); }}>
+                  <Button variant="goldGhost" size="sm" onClick={() => { setEditing(cat); setOpen(true); }}>
                     Editar
                   </Button>
                 </td>
@@ -70,20 +70,20 @@ export function CategoriesTable({
           </tbody>
         </table>
       </div>
-      <Button className="mt-4" onClick={() => { setEditing(null); setOpen(true); }}>
+      <Button className="mt-4" variant="gold" onClick={() => { setEditing(null); setOpen(true); }}>
         Agregar categoría
       </Button>
 
       <Modal open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? "Editar categoría" : "Nueva categoría"}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input name="name" label="Nombre" defaultValue={editing?.name} required />
+          <Input name="name" label="Nombre" defaultValue={editing?.name} required labelClassName="text-antreva-navy" />
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Ubicación</label>
+            <label className="mb-1 block text-sm font-medium text-antreva-navy">Ubicación</label>
             <select
               name="locationId"
               required
               defaultValue={editing?.locationId}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-antreva-navy"
             >
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>{loc.name}</option>
@@ -95,14 +95,15 @@ export function CategoriesTable({
             label="Orden"
             type="number"
             defaultValue={editing?.sortOrder ?? 0}
+            labelClassName="text-antreva-navy"
           />
           <label className="flex items-center gap-2">
             <input type="checkbox" name="isActive" defaultChecked={editing?.isActive ?? true} />
-            <span className="text-sm">Activa</span>
+            <span className="text-sm text-antreva-navy">Activa</span>
           </label>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button type="submit" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
+            <Button type="button" variant="goldSecondary" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button type="submit" variant="gold" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
           </div>
         </form>
       </Modal>

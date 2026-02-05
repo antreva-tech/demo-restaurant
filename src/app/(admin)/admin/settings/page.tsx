@@ -14,7 +14,7 @@ export default async function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Configuración</h1>
+      <h1 className="text-2xl font-semibold text-antreva-navy">Configuración</h1>
       <Card title="Restaurant y Caja">
         <SettingsForm restaurant={restaurant} />
       </Card>

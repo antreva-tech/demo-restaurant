@@ -30,10 +30,10 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         aria-labelledby="modal-title"
       >
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 id="modal-title" className="text-lg font-semibold text-gray-900">
+          <h2 id="modal-title" className="text-lg font-semibold text-antreva-navy">
             {title}
           </h2>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Cerrar">
+          <Button variant="goldGhost" size="sm" onClick={onClose} aria-label="Cerrar">
             ×
           </Button>
         </div>

@@ -51,7 +51,7 @@ function saveCart(state: CartState) {
   }
 }
 
-interface CartContextValue extends CartState {
+export interface CartContextValue extends CartState {
   setLocation: (restaurantSlug: string, locationSlug: string) => void;
   addItem: (item: Omit<CartItem, "quantity">) => void;
   updateQuantity: (menuItemId: string, quantity: number) => void;
