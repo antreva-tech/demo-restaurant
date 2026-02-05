@@ -4,7 +4,7 @@ import { getOrdersForAdmin } from "@/server/queries/orders";
 import { getLocationsForAdmin } from "@/server/queries/admin";
 import { Card } from "@/components/ui/Card";
 import { OrdersToolbar } from "@/components/admin/OrdersToolbar";
-import { OrdersTableWithModal } from "@/components/admin/OrdersTableWithModal";
+import { OrdersTableWithModal, type OrderRow } from "@/components/admin/OrdersTableWithModal";
 import { Suspense } from "react";
 
 export default async function AdminOrdersPage({
@@ -27,19 +27,22 @@ export default async function AdminOrdersPage({
     getLocationsForAdmin(restaurantId),
   ]);
 
-  type OrderRow = (typeof ordersRaw)[number] & {
-    location?: { name: string };
-    employee?: { name: string; employeeNumber?: string | null };
-    customerName?: string | null;
-    customerPhone?: string | null;
-  };
-  let orders = ordersRaw as OrderRow[];
+  let orders: OrderRow[] = ordersRaw.map((o) => ({
+    ...o,
+    orderNumber: o.orderNumber,
+    location: o.location ? { name: o.location.name } : undefined,
+    employee: o.employee
+      ? { name: o.employee.name, employeeNumber: o.employee.employeeNumber ?? null }
+      : undefined,
+    customerName: o.customerName ?? null,
+    customerPhone: o.customerPhone ?? null,
+  }));
 
   if (params.search?.trim()) {
     const q = params.search.trim().toLowerCase();
     orders = orders.filter(
       (o) =>
-        String((o as { orderNumber?: number }).orderNumber ?? "").includes(q) ||
+        String(o.orderNumber ?? "").includes(q) ||
         o.id.toLowerCase().includes(q) ||
         (o.employee?.name?.toLowerCase().includes(q) ?? false) ||
         (o.employee?.employeeNumber?.toLowerCase().includes(q) ?? false) ||

@@ -5,7 +5,8 @@ import { formatDOP } from "@/lib/money";
 import { OrderInvoiceModal } from "./OrderInvoiceModal";
 import type { OrderStatus } from "@prisma/client";
 
-type OrderRow = {
+/** Row shape for admin orders table; must match getOrdersForAdmin + location/employee includes. */
+export type OrderRow = {
   id: string;
   orderNumber: number;
   createdAt: Date;
