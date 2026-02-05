@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  /* Main site menu palette (landing uses these for consistency with menu design) */
+  --menu-brown: #3D2817;
+  --menu-brown-light: #4A3320;
+  --menu-gold: #D4AF37;
+  --menu-gold-hover: #B8962E;
+  --menu-cream: #F5F0E6;
+  --menu-cream-muted: #E8E0D0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Hide scrollbar but keep scroll (e.g. category pills). */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile nav: safe areas for notched devices and home indicator. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Respect reduced motion for scroll-into-view and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .scroll-smooth-nav {
+    scroll-behavior: auto;
+  }
+}
+.scroll-smooth-nav {
+  scroll-behavior: smooth;
+}

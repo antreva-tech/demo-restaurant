@@ -1,0 +1,221 @@
+// Neon: use DATABASE_URL (pooled) for runtime, DIRECT_URL for migrate
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// --- App models ---
+
+model Restaurant {
+  id                         String   @id @default(cuid())
+  name                       String
+  slug                       String   @unique
+  currency                   String   @default("DOP")
+  timezone                   String   @default("America/Santo_Domingo")
+  taxRateBps                 Int      @default(1800)
+  serviceChargeBps           Int      @default(0)
+  posInactivityTimeoutMinutes Int     @default(15)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  locations   Location[]
+  categories  Category[]
+  menuItems   MenuItem[]
+  users       User[]
+  orders      Order[]
+}
+
+model Location {
+  id           String   @id @default(cuid())
+  restaurantId String
+  name         String
+  slug         String
+  address      String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categories Category[]
+  menuItems  MenuItem[]
+  orders     Order[]
+
+  @@unique([restaurantId, slug])
+}
+
+model Category {
+  id           String   @id @default(cuid())
+  restaurantId String
+  locationId   String
+  name         String
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  location   Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  menuItems  MenuItem[]
+
+  @@index([locationId])
+}
+
+model MenuItem {
+  id           String   @id @default(cuid())
+  restaurantId String
+  locationId   String
+  categoryId   String
+  name         String
+  description  String?
+  priceCents   Int
+  imageUrl     String?
+  isActive     Boolean  @default(true)
+  isAvailable  Boolean  @default(true)
+  tags         String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  location   Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([categoryId])
+  @@index([locationId])
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+model User {
+  id             String    @id @default(cuid())
+  restaurantId   String
+  name           String
+  email          String    @unique
+  passwordHash   String?
+  role           Role
+  isActive       Boolean   @default(true)
+  employeeNumber String?
+  pinHash        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders     Order[]
+  accounts   Account[]
+  sessions   Session[]
+
+  @@unique([restaurantId, employeeNumber])
+  @@index([restaurantId])
+}
+
+enum OrderStatus {
+  OPEN
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  MIXED
+}
+
+model Order {
+  id                 String        @id @default(cuid())
+  restaurantId       String
+  locationId         String
+  employeeId         String
+  status             OrderStatus   @default(OPEN)
+  notes              String?
+  customerName       String?
+  customerPhone      String?
+  subtotalCents      Int           @default(0)
+  taxCents           Int           @default(0)
+  serviceChargeCents Int           @default(0)
+  discountCents      Int           @default(0)
+  totalCents         Int           @default(0)
+  paymentMethod      PaymentMethod?
+  cashReceivedCents   Int?
+  changeGivenCents   Int?
+  paidAt             DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  location   Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  employee   User        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  items      OrderItem[]
+
+  @@index([restaurantId])
+  @@index([locationId])
+  @@index([employeeId])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id                    String   @id @default(cuid())
+  orderId               String
+  menuItemId            String
+  nameSnapshot          String
+  unitPriceCentsSnapshot Int
+  quantity               Int
+  lineTotalCents         Int
+  notes                  String?
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// --- Auth.js / NextAuth Prisma adapter ---
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
