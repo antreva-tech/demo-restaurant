@@ -48,7 +48,7 @@ export async function getMenuItemsForLocation(locationId: string, categoryId?: s
 }
 
 /**
- * Full public menu data for a restaurant location.
+ * Full public menu data for a restaurant location (categories + items from DB).
  */
 export async function getPublicMenu(restaurantSlug: string, locationSlug: string) {
   const restaurant = await getRestaurantBySlug(restaurantSlug);
@@ -58,4 +58,21 @@ export async function getPublicMenu(restaurantSlug: string, locationSlug: string
   const categories = await getCategoriesForLocation(location.id);
   const menuItems = await getMenuItemsForLocation(location.id);
   return { restaurant, location, categories, menuItems };
+}
+
+/**
+ * Default public menu when no path is configured: first restaurant and first active location from DB.
+ * Used so the landing menu preview is always driven by database content.
+ */
+export async function getDefaultPublicMenu() {
+  const restaurant = await prisma.restaurant.findFirst({
+    orderBy: { slug: "asc" },
+  });
+  if (!restaurant) return null;
+  const location = await prisma.location.findFirst({
+    where: { restaurantId: restaurant.id, isActive: true },
+    orderBy: { name: "asc" },
+  });
+  if (!location) return null;
+  return getPublicMenu(restaurant.slug, location.slug);
 }

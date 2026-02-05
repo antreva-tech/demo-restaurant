@@ -22,8 +22,8 @@ interface MenuPreviewSectionProps {
 }
 
 /**
- * Displays menu preview on the home page (categories + items with prices). Spanish, mobile-first.
- * "Pedir en línea" links to the full menu page where customers can add to cart and checkout.
+ * Displays menu preview on the home page (categories + items with prices). Data is from the database
+ * (getPublicMenu / getDefaultPublicMenu); no hardcoded menu content. "Pedir en línea" links to the full menu.
  */
 export function MenuPreviewSection({
   menuPath,
