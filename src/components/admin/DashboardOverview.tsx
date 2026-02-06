@@ -14,6 +14,12 @@ interface DashboardData {
     orderCount: number;
     ticketPromedioCents: number;
     cashPct: number;
+    cashTotalCents?: number;
+    transferTotalCents?: number;
+    cardTotalCents?: number;
+    cardCount?: number;
+    cardManualCount?: number;
+    cardProviderCount?: number;
   };
   salesByDay: { date: string; totalCents: number }[];
   topItems: {
@@ -140,6 +146,27 @@ export function DashboardOverview() {
           <p className="text-2xl font-semibold text-antreva-navy">{kpis.cashPct}%</p>
         </Card>
       </div>
+      {(kpis.cardTotalCents != null && kpis.cardTotalCents > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <p className="text-sm font-medium text-antreva-navy">Tarjeta (total)</p>
+            <p className="text-2xl font-semibold text-antreva-navy">{formatDOP(kpis.cardTotalCents)}</p>
+            <p className="mt-1 text-xs text-antreva-slate">{kpis.cardCount ?? 0} órdenes</p>
+          </Card>
+          {(kpis.cardManualCount != null || kpis.cardProviderCount != null) && (
+            <>
+              <Card>
+                <p className="text-sm font-medium text-antreva-navy">Tarjeta (manual)</p>
+                <p className="text-xl font-semibold text-antreva-navy">{kpis.cardManualCount ?? 0} órdenes</p>
+              </Card>
+              <Card>
+                <p className="text-sm font-medium text-antreva-navy">Tarjeta (proveedor)</p>
+                <p className="text-xl font-semibold text-antreva-navy">{kpis.cardProviderCount ?? 0} órdenes</p>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
 
       <Card title="Ventas por día">
         <DashboardCharts salesByDay={salesByDay} />

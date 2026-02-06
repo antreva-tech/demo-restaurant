@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { getPosMenu } from "@/server/actions/pos";
-import { createOrderAndPay } from "@/server/actions/orders";
+import { createOrderAndPay, createOrderOpen } from "@/server/actions/orders";
+import { createPaymentLink, checkPaymentStatus, confirmTerminalPayment, completeTransferPayment } from "@/server/actions/payments";
+import { getIntegrationsForPos } from "@/server/actions/payment-integrations";
 import { formatDOP, computeOrderTotalInclusive } from "@/lib/money";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { PosItemCard } from "@/components/pos/PosItemCard";
 import { DEFAULT_FOOD_IMAGE, getProductCardImageUrl } from "@/components/public/constants";
 import type { Category, MenuItem, Location } from "@prisma/client";
+import type { EnabledIntegrationsForPos } from "@/server/payments/providers/registry";
+import QRCode from "qrcode";
 
 export interface OrderLine {
   /** null = custom/off-menu item added by manager or admin. */
@@ -22,28 +26,52 @@ export interface OrderLine {
 
 interface PosBuilderProps {
   locations: Location[];
-  restaurant: { taxRateBps: number; serviceChargeBps: number };
-  /** If true, show button to add custom item with name and price (admin/manager only). */
+  restaurant: {
+    taxRateBps: number;
+    serviceChargeBps: number;
+    allowCash: boolean;
+    allowTransfer: boolean;
+    allowCard: boolean;
+  };
+  initialIntegrations: EnabledIntegrationsForPos;
   canAddCustomItem?: boolean;
 }
 
-export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: PosBuilderProps) {
+type PaymentMode = "CASH" | "TRANSFER" | "CARD_LINK" | "CARD_TERMINAL";
+
+export function PosBuilder({
+  locations,
+  restaurant,
+  initialIntegrations,
+  canAddCustomItem = false,
+}: PosBuilderProps) {
   const [locationId, setLocationId] = useState<string>(locations[0]?.id ?? "");
+  const [integrations, setIntegrations] = useState<EnabledIntegrationsForPos>(initialIntegrations);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<OrderLine[]>([]);
   const [orderNotes, setOrderNotes] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "TRANSFER" | "MIXED">("CASH");
+  const [paymentMode, setPaymentMode] = useState<PaymentMode | null>(null);
   const [cashReceived, setCashReceived] = useState("");
   const [payLoading, setPayLoading] = useState(false);
-  /** Menu item IDs whose order-line thumbnail failed to load; use fallback image. */
   const [failedThumbIds, setFailedThumbIds] = useState<Set<string>>(new Set());
-  /** Custom item modal: open state and form (name, price in RD$ string). */
   const [customItemOpen, setCustomItemOpen] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customPriceRd, setCustomPriceRd] = useState("");
+  /** Deferred payment: order created OPEN, then we show link/terminal/transfer UI. */
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  /** Card link modal: url + paymentId; if not_implemented show fallback. */
+  const [linkModal, setLinkModal] = useState<{ url: string; paymentId: string } | { error: "not_implemented"; orderId: string } | null>(null);
+  const [linkStatus, setLinkStatus] = useState<"PENDING" | "SUCCEEDED" | "CHECKING">("PENDING");
+  /** Terminal modal: orderId + integrationId for manual capture. */
+  const [terminalModal, setTerminalModal] = useState<{ orderId: string; integrationId: string } | null>(null);
+  const [terminalApproval, setTerminalApproval] = useState("");
+  const [terminalLast4, setTerminalLast4] = useState("");
+  /** Transfer modal: orderId + optional reference. */
+  const [transferModal, setTransferModal] = useState<{ orderId: string } | null>(null);
+  const [transferRef, setTransferRef] = useState("");
 
   useEffect(() => {
     if (!locationId) return;
@@ -54,6 +82,13 @@ export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: 
         setItems(res.items);
       }
       setLoading(false);
+    });
+  }, [locationId]);
+
+  useEffect(() => {
+    if (!locationId) return;
+    getIntegrationsForPos(locationId).then((res) => {
+      if (!("error" in res)) setIntegrations({ cardLink: res.cardLink, terminal: res.terminal });
     });
   }, [locationId]);
 
@@ -131,11 +166,11 @@ export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: 
   const subtotalCents = order.reduce((s, l) => s + l.lineTotalCents, 0);
   const { totalCents } = computeOrderTotalInclusive(subtotalCents, 0);
   const cashReceivedCents = Math.round(parseFloat(cashReceived || "0") * 100);
-  const changeCents = (paymentMethod === "CASH" || paymentMethod === "MIXED") ? Math.max(0, cashReceivedCents - totalCents) : 0;
+  const changeCents = paymentMode === "CASH" ? Math.max(0, cashReceivedCents - totalCents) : 0;
 
-  async function handlePay() {
+  async function handlePayCash() {
     if (order.length === 0) return;
-    if ((paymentMethod === "CASH" || paymentMethod === "MIXED") && cashReceivedCents < totalCents) {
+    if (cashReceivedCents < totalCents) {
       alert("Efectivo recibido debe ser mayor o igual al total.");
       return;
     }
@@ -144,8 +179,8 @@ export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: 
       locationId,
       items: order,
       orderNotes: orderNotes || undefined,
-      paymentMethod,
-      cashReceivedCents: paymentMethod === "CASH" || paymentMethod === "MIXED" ? cashReceivedCents : undefined,
+      paymentMethod: "CASH",
+      cashReceivedCents,
     });
     setPayLoading(false);
     if (res?.ok) {
@@ -153,8 +188,130 @@ export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: 
       setOrderNotes("");
       setCheckoutOpen(false);
       setCashReceived("");
+      setPaymentMode(null);
     } else {
       alert((res as { error?: string })?.error ?? "Error al guardar");
+    }
+  }
+
+  async function handleTransferClick() {
+    if (order.length === 0) return;
+    setPayLoading(true);
+    const res = await createOrderOpen({ locationId, items: order, orderNotes: orderNotes || undefined });
+    setPayLoading(false);
+    if (res?.ok && res.orderId) {
+      setOpenOrderId(res.orderId);
+      setTransferModal({ orderId: res.orderId });
+      setCheckoutOpen(false);
+    } else {
+      alert((res as { error?: string })?.error ?? "Error al crear orden");
+    }
+  }
+
+  async function handleTransferConfirm() {
+    if (!transferModal) return;
+    setPayLoading(true);
+    const res = await completeTransferPayment(transferModal.orderId, transferRef.trim() || undefined);
+    setPayLoading(false);
+    if (res?.ok) {
+      setOrder([]);
+      setOrderNotes("");
+      setTransferModal(null);
+      setTransferRef("");
+      setOpenOrderId(null);
+    } else {
+      alert((res as { error?: string })?.error ?? "Error");
+    }
+  }
+
+  async function handleCardLinkClick(integrationId: string) {
+    if (order.length === 0) return;
+    setPayLoading(true);
+    const openRes = await createOrderOpen({ locationId, items: order, orderNotes: orderNotes || undefined });
+    if (!openRes?.ok || !openRes.orderId) {
+      setPayLoading(false);
+      alert((openRes as { error?: string })?.error ?? "Error al crear orden");
+      return;
+    }
+    const linkRes = await createPaymentLink(openRes.orderId, integrationId);
+    setPayLoading(false);
+    if (linkRes?.ok && "url" in linkRes) {
+      setOpenOrderId(openRes.orderId);
+      setLinkModal({ url: linkRes.url, paymentId: linkRes.paymentId });
+      setLinkStatus("PENDING");
+      setCheckoutOpen(false);
+    } else if (linkRes?.error === "not_implemented") {
+      setOpenOrderId(openRes.orderId);
+      setLinkModal({ error: "not_implemented", orderId: openRes.orderId });
+      setCheckoutOpen(false);
+    } else {
+      alert((linkRes as { error?: string })?.error ?? "Error");
+    }
+  }
+
+  async function handleCardTerminalClick(integrationId: string) {
+    if (order.length === 0) return;
+    setPayLoading(true);
+    const res = await createOrderOpen({ locationId, items: order, orderNotes: orderNotes || undefined });
+    setPayLoading(false);
+    if (res?.ok && res.orderId) {
+      setOpenOrderId(res.orderId);
+      setTerminalModal({ orderId: res.orderId, integrationId });
+      setTerminalApproval("");
+      setTerminalLast4("");
+      setCheckoutOpen(false);
+    } else {
+      alert((res as { error?: string })?.error ?? "Error al crear orden");
+    }
+  }
+
+  async function handleTerminalConfirm() {
+    if (!terminalModal) return;
+    if (!terminalApproval.trim()) {
+      alert("Código de aprobación es requerido.");
+      return;
+    }
+    setPayLoading(true);
+    const res = await confirmTerminalPayment(terminalModal.orderId, terminalModal.integrationId, {
+      approvalCode: terminalApproval.trim(),
+      last4: terminalLast4.trim() || undefined,
+    });
+    setPayLoading(false);
+    if (res?.ok) {
+      setOrder([]);
+      setOrderNotes("");
+      setTerminalModal(null);
+      setOpenOrderId(null);
+    } else {
+      alert((res as { error?: string })?.error ?? "Error");
+    }
+  }
+
+  async function handleLinkCheckStatus(paymentId: string) {
+    setLinkStatus("CHECKING");
+    const res = await checkPaymentStatus(paymentId);
+    if (res?.ok && res.status === "SUCCEEDED") {
+      setLinkStatus("SUCCEEDED");
+      setOrder([]);
+      setOrderNotes("");
+      setLinkModal(null);
+      setOpenOrderId(null);
+    } else {
+      setLinkStatus("PENDING");
+      if (res?.error) alert(res.error);
+    }
+  }
+
+  function resetAfterLinkFallback() {
+    if (linkModal && "orderId" in linkModal && linkModal.error === "not_implemented") {
+      const orderId = linkModal.orderId;
+      const firstTerminal = integrations.terminal[0];
+      if (firstTerminal) {
+        setLinkModal(null);
+        setTerminalModal({ orderId, integrationId: firstTerminal.id });
+        setTerminalApproval("");
+        setTerminalLast4("");
+      }
     }
   }
 
@@ -318,23 +475,43 @@ export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: 
         </div>
       </Modal>
 
-      <Modal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} title="Cobrar">
+      <Modal open={checkoutOpen} onClose={() => { setCheckoutOpen(false); setPaymentMode(null); }} title="Cobrar">
         <div className="space-y-4 text-gray-900">
           <div className="text-xl font-bold text-gray-900">Total: {formatDOP(totalCents)}</div>
           <div>
-            <label className="mb-1 block text-sm font-semibold text-gray-900">Método de pago</label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as "CASH" | "CARD" | "TRANSFER" | "MIXED")}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
-            >
-              <option value="CASH">Efectivo</option>
-              <option value="CARD">Tarjeta</option>
-              <option value="TRANSFER">Transferencia</option>
-              <option value="MIXED">Mixto</option>
-            </select>
+            <label className="mb-2 block text-sm font-semibold text-gray-900">Método de pago</label>
+            <div className="flex flex-wrap gap-2">
+              {restaurant.allowCash && (
+                <Button variant="gold" onClick={() => setPaymentMode("CASH")}>
+                  Efectivo
+                </Button>
+              )}
+              {restaurant.allowTransfer && (
+                <Button variant="goldSecondary" onClick={handleTransferClick} disabled={payLoading}>
+                  Transferencia
+                </Button>
+              )}
+              {restaurant.allowCard && integrations.cardLink.length > 0 && (
+                <Button
+                  variant="goldSecondary"
+                  onClick={() => handleCardLinkClick(integrations.cardLink[0].id)}
+                  disabled={payLoading}
+                >
+                  Tarjeta (Link/QR)
+                </Button>
+              )}
+              {restaurant.allowCard && integrations.terminal.length > 0 && (
+                <Button
+                  variant="goldSecondary"
+                  onClick={() => handleCardTerminalClick(integrations.terminal[0].id)}
+                  disabled={payLoading}
+                >
+                  Tarjeta (Terminal)
+                </Button>
+              )}
+            </div>
           </div>
-          {(paymentMethod === "CASH" || paymentMethod === "MIXED") && (
+          {paymentMode === "CASH" && (
             <>
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-900">Efectivo recibido (RD$)</label>
@@ -349,16 +526,135 @@ export function PosBuilder({ locations, restaurant, canAddCustomItem = false }: 
               {cashReceivedCents >= totalCents && (
                 <p className="text-lg font-semibold text-green-700">Cambio: {formatDOP(changeCents)}</p>
               )}
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setPaymentMode(null)}>Atrás</Button>
+                <Button onClick={handlePayCash} disabled={payLoading || cashReceivedCents < totalCents}>
+                  {payLoading ? "Guardando…" : "Marcar como pagado"}
+                </Button>
+              </div>
             </>
           )}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setCheckoutOpen(false)}>Cancelar</Button>
-            <Button onClick={handlePay} disabled={payLoading || ((paymentMethod === "CASH" || paymentMethod === "MIXED") && cashReceivedCents < totalCents)}>
-              {payLoading ? "Guardando…" : "Marcar como pagado"}
-            </Button>
-          </div>
+          {paymentMode !== "CASH" && (
+            <div className="flex justify-end">
+              <Button variant="secondary" onClick={() => setCheckoutOpen(false)}>Cancelar</Button>
+            </div>
+          )}
         </div>
       </Modal>
+
+      {linkModal && "url" in linkModal && (
+        <Modal open onClose={() => { setLinkModal(null); setOpenOrderId(null); }} title="Tarjeta (Link/QR)">
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <LinkQr url={linkModal.url} />
+            </div>
+            <p className="text-center text-sm text-gray-600">
+              Estado: {linkStatus === "SUCCEEDED" ? "Pagado" : linkStatus === "CHECKING" ? "Revisando…" : "Pendiente"}
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="goldSecondary" onClick={() => navigator.clipboard?.writeText(linkModal.url)}>
+                Copiar enlace
+              </Button>
+              <Button variant="gold" onClick={() => handleLinkCheckStatus(linkModal.paymentId)} disabled={linkStatus === "CHECKING"}>
+                Revisar pago
+              </Button>
+            </div>
+            {linkStatus === "SUCCEEDED" && (
+              <Button className="w-full" onClick={() => { setLinkModal(null); setOpenOrderId(null); }}>
+                Cerrar
+              </Button>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {linkModal && "error" in linkModal && linkModal.error === "not_implemented" && (
+        <Modal open onClose={() => { setLinkModal(null); setOpenOrderId(null); }} title="Tarjeta (Link/QR)">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Integración configurada pero el conector del proveedor aún no está activo.
+            </p>
+            <Button className="w-full" onClick={resetAfterLinkFallback}>
+              Registrar pago manualmente (Tarjeta)
+            </Button>
+            <Button variant="secondary" className="w-full" onClick={() => { setLinkModal(null); setOpenOrderId(null); }}>
+              Cancelar
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {terminalModal && (
+        <Modal open onClose={() => { setTerminalModal(null); setOpenOrderId(null); }} title="Tarjeta (Terminal)">
+          <div className="space-y-4">
+            <p className="text-lg font-semibold text-gray-900">Monto a cobrar: {formatDOP(totalCents)}</p>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Código de aprobación *</label>
+              <input
+                type="text"
+                value={terminalApproval}
+                onChange={(e) => setTerminalApproval(e.target.value)}
+                placeholder="Ej. 123456"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Últimos 4 dígitos (opcional)</label>
+              <input
+                type="text"
+                maxLength={4}
+                value={terminalLast4}
+                onChange={(e) => setTerminalLast4(e.target.value.replace(/\D/g, ""))}
+                placeholder="****"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => { setTerminalModal(null); setOpenOrderId(null); }}>
+                Cancelar
+              </Button>
+              <Button className="flex-1" onClick={handleTerminalConfirm} disabled={payLoading || !terminalApproval.trim()}>
+                {payLoading ? "Guardando…" : "Confirmar pago"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {transferModal && (
+        <Modal open onClose={() => { setTransferModal(null); setOpenOrderId(null); }} title="Transferencia">
+          <div className="space-y-4">
+            <p className="text-lg font-semibold text-gray-900">Monto: {formatDOP(totalCents)}</p>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Referencia de transferencia (opcional)</label>
+              <input
+                type="text"
+                value={transferRef}
+                onChange={(e) => setTransferRef(e.target.value)}
+                placeholder="Ej. REF-123"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => { setTransferModal(null); setOpenOrderId(null); }}>
+                Cancelar
+              </Button>
+              <Button className="flex-1" onClick={handleTransferConfirm} disabled={payLoading}>
+                {payLoading ? "Guardando…" : "Confirmar pago"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
+}
+
+function LinkQr({ url }: { url: string }) {
+  const [dataUrl, setDataUrl] = useState<string>("");
+  useEffect(() => {
+    QRCode.toDataURL(url, { width: 200, margin: 2 }).then(setDataUrl).catch(() => setDataUrl(""));
+  }, [url]);
+  if (!dataUrl) return <div className="h-[200px] w-[200px] bg-gray-100 rounded" />;
+  return <img src={dataUrl} alt="QR de pago" className="h-[200px] w-[200px] rounded" />;
 }

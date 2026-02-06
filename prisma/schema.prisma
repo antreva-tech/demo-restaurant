@@ -20,14 +20,19 @@ model Restaurant {
   taxRateBps                 Int      @default(1800)
   serviceChargeBps           Int      @default(0)
   posInactivityTimeoutMinutes Int     @default(15)
+  allowCash                   Boolean  @default(true)
+  allowTransfer               Boolean  @default(true)
+  allowCard                   Boolean  @default(true)
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 
-  locations   Location[]
-  categories  Category[]
-  menuItems   MenuItem[]
-  users       User[]
-  orders      Order[]
+  locations            Location[]
+  categories           Category[]
+  menuItems            MenuItem[]
+  users                User[]
+  orders               Order[]
+  paymentIntegrations  PaymentIntegration[]
+  payments             Payment[]
 }
 
 model Location {
@@ -44,6 +49,8 @@ model Location {
   categories Category[]
   menuItems  MenuItem[]
   orders     Order[]
+  paymentIntegrations PaymentIntegration[]
+  payments   Payment[]
 
   @@unique([restaurantId, slug])
 }
@@ -131,32 +138,110 @@ enum PaymentMethod {
   MIXED
 }
 
+enum OrderPaymentChannel {
+  CASH
+  TRANSFER
+  CARD
+}
+
+enum PaymentProvider {
+  CARDNET
+  AZUL
+  MANUAL
+}
+
+enum PaymentIntegrationType {
+  CARD_LINK
+  TERMINAL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum TerminalEntryType {
+  MANUAL_APPROVAL_CODE
+}
+
+model PaymentIntegration {
+  id              String                 @id @default(cuid())
+  restaurantId    String
+  locationId      String?
+  provider        PaymentProvider
+  type            PaymentIntegrationType
+  name            String
+  isEnabled       Boolean                @default(true)
+  configEncrypted String                 @db.Text
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  location   Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId])
+  @@index([locationId])
+}
+
+model Payment {
+  id            String          @id @default(cuid())
+  restaurantId  String
+  locationId    String
+  orderId       String          @unique
+  provider      PaymentProvider
+  type          PaymentIntegrationType
+  status        PaymentStatus
+  amountCents   Int
+  currency      String          @default("DOP")
+  externalId    String?
+  externalUrl   String?
+  approvalCode  String?
+  last4         String?
+  metadataJson  Json?
+  succeededAt   DateTime?
+  failedAt      DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  location   Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([orderId])
+  @@index([externalId])
+}
+
 model Order {
-  id                 String        @id @default(cuid())
+  id                 String              @id @default(cuid())
   restaurantId       String
   locationId         String
   employeeId         String
-  orderNumber        Int           /** Simple unique number per restaurant (e.g. 1, 2, 3) for display. */
-  status             OrderStatus   @default(OPEN)
+  orderNumber        Int
+  status             OrderStatus         @default(OPEN)
   notes              String?
   customerName       String?
   customerPhone      String?
-  subtotalCents      Int           @default(0)
-  taxCents           Int           @default(0)
-  serviceChargeCents Int           @default(0)
-  discountCents      Int           @default(0)
-  totalCents         Int           @default(0)
+  subtotalCents      Int                 @default(0)
+  taxCents           Int                 @default(0)
+  serviceChargeCents Int                 @default(0)
+  discountCents      Int                 @default(0)
+  totalCents         Int                 @default(0)
   paymentMethod      PaymentMethod?
+  paymentChannel     OrderPaymentChannel?
   cashReceivedCents   Int?
   changeGivenCents   Int?
   paidAt             DateTime?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  location   Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  employee   User        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  location   Location   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  employee   User       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   items      OrderItem[]
+  payment    Payment?
 
   @@unique([restaurantId, orderNumber])
   @@index([restaurantId])
@@ -168,7 +253,6 @@ model Order {
 model OrderItem {
   id                    String   @id @default(cuid())
   orderId               String
-  /** Null for custom/off-menu items added by manager or admin at POS. */
   menuItemId            String?
   nameSnapshot          String
   unitPriceCentsSnapshot Int

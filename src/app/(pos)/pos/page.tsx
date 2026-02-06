@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getRestaurantForPos, getLocationsForPos } from "@/server/queries/pos";
+import { getEnabledIntegrationsForPos } from "@/server/payments/providers/registry";
 import { PosBuilder } from "@/components/pos/PosBuilder";
 
 export default async function PosPage() {
@@ -21,7 +22,8 @@ export default async function PosPage() {
     );
   }
 
-  /** Show "Artículo personalizado" to admin/manager. Set to true to show to all POS users. */
+  const firstLocationId = locations[0].id;
+  const integrations = await getEnabledIntegrationsForPos(restaurantId, firstLocationId);
   const canAddCustomItem = true;
 
   return (
@@ -30,7 +32,11 @@ export default async function PosPage() {
       restaurant={{
         taxRateBps: restaurant.taxRateBps,
         serviceChargeBps: restaurant.serviceChargeBps,
+        allowCash: restaurant.allowCash,
+        allowTransfer: restaurant.allowTransfer,
+        allowCard: restaurant.allowCard,
       }}
+      initialIntegrations={integrations}
       canAddCustomItem={canAddCustomItem}
     />
   );

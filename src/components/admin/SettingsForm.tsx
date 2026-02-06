@@ -33,6 +33,38 @@ export function SettingsForm({ restaurant }: { restaurant: Restaurant }) {
         defaultValue={restaurant.posInactivityTimeoutMinutes}
         title="Si el empleado no tiene actividad en la caja durante este tiempo, se cierra la sesión."
       />
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-antreva-navy">
+          Métodos de pago permitidos en la caja
+        </p>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="allowCash"
+            defaultChecked={restaurant.allowCash}
+            className="rounded text-antreva-blue"
+          />
+          Permitir Efectivo
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="allowTransfer"
+            defaultChecked={restaurant.allowTransfer}
+            className="rounded text-antreva-blue"
+          />
+          Permitir Transferencia
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="allowCard"
+            defaultChecked={restaurant.allowCard}
+            className="rounded text-antreva-blue"
+          />
+          Permitir Tarjeta
+        </label>
+      </div>
       <Button type="submit" variant="gold" disabled={loading}>{loading ? "Guardando…" : "Guardar"}</Button>
     </form>
   );

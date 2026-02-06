@@ -30,12 +30,14 @@ export default async function AdminOrdersPage({
   let orders: OrderRow[] = ordersRaw.map((o) => ({
     ...o,
     orderNumber: o.orderNumber,
+    paymentChannel: o.paymentChannel ?? null,
     location: o.location ? { name: o.location.name } : undefined,
     employee: o.employee
       ? { name: o.employee.name, employeeNumber: o.employee.employeeNumber ?? null }
       : undefined,
     customerName: o.customerName ?? null,
     customerPhone: o.customerPhone ?? null,
+    payment: o.payment ? { provider: o.payment.provider, approvalCode: o.payment.approvalCode, externalId: o.payment.externalId } : null,
   }));
 
   if (params.search?.trim()) {

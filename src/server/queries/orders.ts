@@ -21,6 +21,7 @@ export async function getOrdersForAdmin(
     include: {
       location: { select: { id: true, name: true } },
       employee: { select: { id: true, name: true, employeeNumber: true } },
+      payment: { select: { provider: true, approvalCode: true, externalId: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 500,
@@ -47,6 +48,7 @@ export async function getOrderByIdForAdmin(restaurantId: string, orderId: string
       employee: { select: { id: true, name: true, employeeNumber: true } },
       items: { orderBy: { id: "asc" } },
       restaurant: { select: { taxRateBps: true, serviceChargeBps: true } },
+      payment: { select: { provider: true, approvalCode: true, externalId: true } },
     },
   });
 }

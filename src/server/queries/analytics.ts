@@ -15,20 +15,44 @@ export async function getKpis(
 
   const orders = await prisma.order.findMany({
     where,
-    select: { totalCents: true, paymentMethod: true },
+    select: { totalCents: true, paymentMethod: true, paymentChannel: true, id: true },
   });
 
   const totalCents = orders.reduce((s, o) => s + o.totalCents, 0);
   const count = orders.length;
   const ticketPromedio = count > 0 ? Math.round(totalCents / count) : 0;
-  const cashCount = orders.filter((o) => o.paymentMethod === "CASH").length;
+  const cashCount = orders.filter((o) => o.paymentMethod === "CASH" || o.paymentChannel === "CASH").length;
   const cashPct = count > 0 ? Math.round((cashCount / count) * 100) : 0;
+
+  const cashTotalCents = orders
+    .filter((o) => o.paymentChannel === "CASH")
+    .reduce((s, o) => s + o.totalCents, 0);
+  const transferTotalCents = orders
+    .filter((o) => o.paymentChannel === "TRANSFER")
+    .reduce((s, o) => s + o.totalCents, 0);
+  const cardOrders = orders.filter((o) => o.paymentChannel === "CARD");
+  const cardTotalCents = cardOrders.reduce((s, o) => s + o.totalCents, 0);
+  const cardCount = cardOrders.length;
+
+  const orderIds = orders.map((o) => o.id);
+  const payments = await prisma.payment.findMany({
+    where: { orderId: { in: orderIds }, status: "SUCCEEDED" },
+    select: { orderId: true, provider: true },
+  });
+  const cardManualCount = payments.filter((p) => cardOrders.some((o) => o.id === p.orderId && p.provider === "MANUAL")).length;
+  const cardProviderCount = cardCount - cardManualCount;
 
   return {
     totalCents,
     orderCount: count,
     ticketPromedioCents: ticketPromedio,
     cashPct,
+    cashTotalCents,
+    transferTotalCents,
+    cardTotalCents,
+    cardCount,
+    cardManualCount,
+    cardProviderCount,
   };
 }
 

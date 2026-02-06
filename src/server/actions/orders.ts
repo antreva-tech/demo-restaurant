@@ -18,7 +18,7 @@ export async function getNextOrderNumber(tx: PrismaTx, restaurantId: string): Pr
   return (r._max?.orderNumber ?? 0) + 1;
 }
 
-/** Item for createOrderAndPay; menuItemId null = custom/off-menu item added at POS. */
+/** Item for createOrderAndPay / createOrderOpen; menuItemId null = custom/off-menu item. */
 export type CreateOrderItem = {
   menuItemId: string | null;
   nameSnapshot: string;
@@ -27,6 +27,70 @@ export type CreateOrderItem = {
   lineTotalCents: number;
   notes?: string;
 };
+
+/**
+ * Creates an order in OPEN status (for deferred payment: link, terminal, transfer).
+ * Returns orderId. Caller then creates Payment and later marks Order PAID.
+ */
+export async function createOrderOpen(params: {
+  locationId: string;
+  items: CreateOrderItem[];
+  orderNotes?: string;
+  discountCents?: number;
+}) {
+  const session = await auth();
+  const restaurantId = (session as { restaurantId?: string })?.restaurantId;
+  const userId = (session?.user as { id?: string })?.id;
+  if (!restaurantId || !userId) return { error: "No autorizado", orderId: null as string | null };
+
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { taxRateBps: true, serviceChargeBps: true },
+  });
+  if (!restaurant) return { error: "Restaurant no encontrado", orderId: null as string | null };
+
+  const subtotalCents = params.items.reduce((s, i) => s + i.lineTotalCents, 0);
+  const discountCents = params.discountCents ?? 0;
+  const { taxCents, serviceChargeCents, totalCents } = computeOrderTotalInclusive(
+    subtotalCents,
+    discountCents
+  );
+
+  const order = await prisma.$transaction(async (tx) => {
+    const orderNumber = await getNextOrderNumber(tx, restaurantId);
+    return tx.order.create({
+      data: {
+        restaurantId,
+        locationId: params.locationId,
+        employeeId: userId,
+        orderNumber,
+        status: "OPEN",
+        notes: params.orderNotes ?? null,
+        subtotalCents,
+        taxCents,
+        serviceChargeCents,
+        discountCents,
+        totalCents,
+        items: {
+          create: params.items.map((i) => {
+            const base = {
+              nameSnapshot: i.nameSnapshot,
+              unitPriceCentsSnapshot: i.unitPriceCentsSnapshot,
+              quantity: i.quantity,
+              lineTotalCents: i.lineTotalCents,
+              notes: i.notes ?? null,
+            };
+            return i.menuItemId != null ? { ...base, menuItemId: i.menuItemId } : base;
+          }),
+        },
+      },
+    });
+  });
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/pos");
+  return { ok: true, orderId: order.id };
+}
 
 export async function createOrderAndPay(params: {
   locationId: string;
@@ -60,6 +124,13 @@ export async function createOrderAndPay(params: {
       ? (params.cashReceivedCents ?? 0) - totalCents
       : null;
 
+  const paymentChannel =
+    params.paymentMethod === "CASH" || params.paymentMethod === "MIXED"
+      ? "CASH"
+      : params.paymentMethod === "TRANSFER"
+        ? "TRANSFER"
+        : "CARD";
+
   const order = await prisma.$transaction(async (tx) => {
     const orderNumber = await getNextOrderNumber(tx, restaurantId);
     return tx.order.create({
@@ -76,6 +147,7 @@ export async function createOrderAndPay(params: {
         discountCents,
         totalCents,
         paymentMethod: params.paymentMethod,
+        paymentChannel,
         cashReceivedCents: params.cashReceivedCents ?? null,
         changeGivenCents,
         paidAt: new Date(),

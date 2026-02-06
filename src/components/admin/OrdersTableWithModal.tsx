@@ -5,7 +5,7 @@ import { formatDOP } from "@/lib/money";
 import { OrderInvoiceModal } from "./OrderInvoiceModal";
 import type { OrderStatus } from "@prisma/client";
 
-/** Row shape for admin orders table; must match getOrdersForAdmin + location/employee includes. */
+/** Row shape for admin orders table; must match getOrdersForAdmin + location/employee/payment includes. */
 export type OrderRow = {
   id: string;
   orderNumber: number;
@@ -13,10 +13,12 @@ export type OrderRow = {
   status: string;
   totalCents: number;
   paymentMethod: string | null;
+  paymentChannel?: string | null;
   customerName: string | null;
   customerPhone: string | null;
   location?: { name: string };
   employee?: { name: string; employeeNumber?: string | null };
+  payment?: { provider: string; approvalCode: string | null; externalId: string | null } | null;
 };
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -37,6 +39,16 @@ const PAYMENT_LABELS: Record<string, string> = {
   TRANSFER: "Transferencia",
   MIXED: "Mixto",
 };
+
+function paymentDisplay(o: OrderRow): string {
+  const channel = o.paymentChannel ?? o.paymentMethod;
+  const base = channel ? PAYMENT_LABELS[channel] ?? channel : "—";
+  if (o.paymentChannel === "CARD" && o.payment?.provider) {
+    const prov = o.payment.provider === "MANUAL" ? " (manual)" : ` (${o.payment.provider})`;
+    return base + prov;
+  }
+  return base;
+}
 
 interface OrdersTableWithModalProps {
   orders: OrderRow[];
@@ -102,7 +114,7 @@ export function OrdersTableWithModal({ orders }: OrdersTableWithModalProps) {
                 </td>
                 <td className="py-2 pr-4 text-antreva-navy">{formatDOP(o.totalCents)}</td>
                 <td className="py-2 pr-4 text-antreva-navy">
-                  {o.paymentMethod ? PAYMENT_LABELS[o.paymentMethod] ?? o.paymentMethod : "—"}
+                  {paymentDisplay(o)}
                 </td>
                 <td className="py-2 pr-4">
                   <span

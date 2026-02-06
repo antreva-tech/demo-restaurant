@@ -9,6 +9,9 @@ export async function getRestaurantForPos(restaurantId: string) {
       taxRateBps: true,
       serviceChargeBps: true,
       posInactivityTimeoutMinutes: true,
+      allowCash: true,
+      allowTransfer: true,
+      allowCard: true,
     },
   });
 }

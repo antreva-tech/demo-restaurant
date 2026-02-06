@@ -1,5 +1,6 @@
 import { PrismaClient, Role } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { encryptJson } from "../src/lib/crypto";
 
 const prisma = new PrismaClient();
 
@@ -15,7 +16,7 @@ async function main() {
   const restaurant = await prisma.restaurant.upsert({
     where: { slug: "demo" },
     create: {
-      name: "Restaurante Demo",
+      name: "Antreva Restaurant Demo",
       slug: "demo",
       currency: "DOP",
       timezone: "America/Santo_Domingo",
@@ -84,6 +85,27 @@ async function main() {
     },
     update: {},
   });
+
+  if (process.env.ENCRYPTION_KEY?.trim()) {
+    const configEncrypted = encryptJson({});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PaymentIntegration exists after prisma generate
+    await (prisma as any).paymentIntegration.upsert({
+      where: { id: "seed-manual-terminal" },
+      create: {
+        id: "seed-manual-terminal",
+        restaurantId: restaurant.id,
+        locationId: location.id,
+        provider: "MANUAL",
+        type: "TERMINAL",
+        name: "Terminal manual",
+        isEnabled: true,
+        configEncrypted,
+      },
+      update: { isEnabled: true, configEncrypted },
+    });
+  } else {
+    console.log("ENCRYPTION_KEY not set; skipping PaymentIntegration seed.");
+  }
 
   console.log(
     "Seed OK: restaurant",

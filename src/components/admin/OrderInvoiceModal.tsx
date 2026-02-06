@@ -467,7 +467,18 @@ export function OrderInvoiceModal({ orderId, onClose }: OrderInvoiceModalProps) 
           </div>
 
           <div className="flex flex-wrap gap-2 text-sm text-antreva-navy">
-            <span>Pago: {displayOrder.paymentMethod ? PAYMENT_LABELS[displayOrder.paymentMethod] ?? displayOrder.paymentMethod : "—"}</span>
+            <span>
+              Pago: {(displayOrder as { paymentChannel?: string | null }).paymentChannel
+                ? PAYMENT_LABELS[(displayOrder as { paymentChannel?: string }).paymentChannel!] ?? (displayOrder as { paymentChannel?: string }).paymentChannel
+                : displayOrder.paymentMethod
+                  ? PAYMENT_LABELS[displayOrder.paymentMethod] ?? displayOrder.paymentMethod
+                  : "—"}
+              {(displayOrder as { payment?: { provider: string; approvalCode: string | null } }).payment?.approvalCode && (
+                <span className="ml-1 text-antreva-slate">
+                  (Cód. aprob.: ****{(displayOrder as { payment: { approvalCode: string } }).payment.approvalCode.slice(-4)})
+                </span>
+              )}
+            </span>
             <span>Estado: {STATUS_LABELS[displayOrder.status]}</span>
             {displayOrder.notes && <span className="w-full text-antreva-slate">Notas: {displayOrder.notes}</span>}
           </div>

@@ -40,6 +40,9 @@ async function AdminNav() {
         <Link href="/admin/orders" className={linkClass}>
           Órdenes
         </Link>
+        <Link href="/admin/pagos" className={linkClass}>
+          Pagos e Integraciones
+        </Link>
         <Link href="/admin/settings" className={linkClass}>
           Configuración
         </Link>
