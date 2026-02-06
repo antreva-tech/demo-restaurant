@@ -74,3 +74,24 @@ export async function updateItem(id: string, formData: FormData) {
     return { error: "Error al actualizar" };
   }
 }
+
+/**
+ * Deletes a menu item. Only items belonging to the current admin's restaurant can be deleted.
+ */
+export async function deleteItem(id: string) {
+  const session = await auth();
+  const restaurantId = (session as { restaurantId?: string })?.restaurantId;
+  if (!restaurantId) return { error: "No autorizado" };
+
+  try {
+    const result = await prisma.menuItem.deleteMany({
+      where: { id, restaurantId },
+    });
+    if (result.count === 0) return { error: "Producto no encontrado" };
+    revalidatePath("/admin/items");
+    revalidatePath("/r/[restaurantSlug]/l/[locationSlug]");
+    return { ok: true };
+  } catch {
+    return { error: "Error al eliminar" };
+  }
+}

@@ -168,15 +168,16 @@ model Order {
 model OrderItem {
   id                    String   @id @default(cuid())
   orderId               String
-  menuItemId            String
+  /** Null for custom/off-menu items added by manager or admin at POS. */
+  menuItemId            String?
   nameSnapshot          String
   unitPriceCentsSnapshot Int
   quantity               Int
   lineTotalCents         Int
   notes                  String?
 
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
 }

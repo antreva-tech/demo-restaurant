@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
-import { createItem, updateItem } from "@/server/actions/items";
+import { createItem, updateItem, deleteItem } from "@/server/actions/items";
 import { formatDOP } from "@/lib/money";
 import { siteConfig } from "@/components/landing/site-config";
-import { DEFAULT_FOOD_IMAGE } from "@/components/public/constants";
+import { getProductCardImageUrl } from "@/components/public/constants";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import type { MenuItem, Category, Location } from "@prisma/client";
 
@@ -28,6 +28,10 @@ function ItemGridCard({
   onEdit: () => void;
 }) {
   const tags = item.tags ?? [];
+  const { src: imageSrc, isLogoPlaceholder } = getProductCardImageUrl(
+    item.imageUrl,
+    siteConfig.logoUrl
+  );
   return (
     <button
       type="button"
@@ -37,9 +41,9 @@ function ItemGridCard({
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={item.imageUrl || siteConfig.logoUrl || DEFAULT_FOOD_IMAGE}
-          alt={item.name}
-          className="h-full w-full object-cover transition group-hover:scale-105"
+          src={imageSrc}
+          alt={isLogoPlaceholder ? "Logo del restaurante" : item.name}
+          className={`h-full w-full transition group-hover:scale-105 ${isLogoPlaceholder ? "object-contain p-4" : "object-cover"}`}
           sizes="(max-width: 640px) 50vw, 25vw"
         />
         {!item.isAvailable && (
@@ -89,6 +93,8 @@ function ItemForm({
   loading,
   onSubmit,
   onCancel,
+  onDelete,
+  deleteLoading,
 }: {
   editing: ItemWithRelations | null;
   locations: Location[];
@@ -96,6 +102,8 @@ function ItemForm({
   loading: boolean;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
+  onDelete?: (() => void) | null;
+  deleteLoading?: boolean;
 }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -183,13 +191,28 @@ function ItemForm({
         />
         <span className="text-sm text-antreva-navy">Disponible en menú</span>
       </label>
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="goldSecondary" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button type="submit" variant="gold" disabled={loading}>
-          {loading ? "Guardando…" : "Guardar"}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          {onDelete && (
+            <Button
+              type="button"
+              variant="goldSecondary"
+              onClick={onDelete}
+              disabled={deleteLoading || loading}
+              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              {deleteLoading ? "Eliminando…" : "Eliminar"}
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button type="button" variant="goldSecondary" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="gold" disabled={loading}>
+            {loading ? "Guardando…" : "Guardar"}
+          </Button>
+        </div>
       </div>
     </form>
   );
@@ -210,6 +233,22 @@ export function ItemsGrid({
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ItemWithRelations | null>(null);
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  async function handleDelete() {
+    if (!editing) return;
+    if (!confirm(`¿Eliminar el producto "${editing.name}"? Esta acción no se puede deshacer.`)) return;
+    setDeleteLoading(true);
+    const res = await deleteItem(editing.id);
+    setDeleteLoading(false);
+    if (res?.ok) {
+      setOpen(false);
+      setEditing(null);
+      window.location.reload();
+    } else {
+      alert((res as { error?: string })?.error ?? "Error al eliminar");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -274,6 +313,8 @@ export function ItemsGrid({
             setOpen(false);
             setEditing(null);
           }}
+          onDelete={editing ? handleDelete : null}
+          deleteLoading={deleteLoading}
         />
       </Modal>
     </>

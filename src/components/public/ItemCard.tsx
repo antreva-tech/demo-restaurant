@@ -1,8 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { formatDOP } from "@/lib/money";
 import { siteConfig } from "@/components/landing/site-config";
-import { DEFAULT_FOOD_IMAGE } from "./constants";
+import { DEFAULT_FOOD_IMAGE, getProductCardImageUrl } from "./constants";
 import { useCartOptional } from "./CartContext";
 
 interface ItemCardProps {
@@ -32,6 +33,11 @@ export function ItemCard({
   const cart = useCartOptional();
   const inCart = cart?.items.find((i) => i.menuItemId === menuItemId);
   const quantity = inCart?.quantity ?? 0;
+  const resolved = getProductCardImageUrl(imageUrl, siteConfig.logoUrl);
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => setLoadFailed(false), [resolved.src]);
+  const imageSrc = loadFailed ? DEFAULT_FOOD_IMAGE : resolved.src;
+  const isLogoPlaceholder = !loadFailed && resolved.isLogoPlaceholder;
 
   const handleAdd = () => {
     if (!cart || !isAvailable) return;
@@ -61,10 +67,11 @@ export function ItemCard({
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={imageUrl || siteConfig.logoUrl || DEFAULT_FOOD_IMAGE}
-          alt={name}
-          className="h-full w-full object-cover"
+          src={imageSrc}
+          alt={isLogoPlaceholder ? "Logo del restaurante" : name}
+          className={`h-full w-full ${isLogoPlaceholder ? "object-contain p-4" : "object-cover"}`}
           sizes="(max-width: 640px) 50vw, 33vw"
+          onError={() => setLoadFailed(true)}
         />
         {!isAvailable && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/35">

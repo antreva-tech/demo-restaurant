@@ -18,9 +18,19 @@ export async function getNextOrderNumber(tx: PrismaTx, restaurantId: string): Pr
   return (r._max?.orderNumber ?? 0) + 1;
 }
 
+/** Item for createOrderAndPay; menuItemId null = custom/off-menu item added at POS. */
+export type CreateOrderItem = {
+  menuItemId: string | null;
+  nameSnapshot: string;
+  unitPriceCentsSnapshot: number;
+  quantity: number;
+  lineTotalCents: number;
+  notes?: string;
+};
+
 export async function createOrderAndPay(params: {
   locationId: string;
-  items: { menuItemId: string; nameSnapshot: string; unitPriceCentsSnapshot: number; quantity: number; lineTotalCents: number; notes?: string }[];
+  items: CreateOrderItem[];
   orderNotes?: string;
   paymentMethod: PaymentMethod;
   cashReceivedCents?: number;
@@ -70,14 +80,16 @@ export async function createOrderAndPay(params: {
         changeGivenCents,
         paidAt: new Date(),
         items: {
-          create: params.items.map((i) => ({
-            menuItemId: i.menuItemId,
-            nameSnapshot: i.nameSnapshot,
-            unitPriceCentsSnapshot: i.unitPriceCentsSnapshot,
-            quantity: i.quantity,
-            lineTotalCents: i.lineTotalCents,
-            notes: i.notes ?? null,
-          })),
+          create: params.items.map((i) => {
+            const base = {
+              nameSnapshot: i.nameSnapshot,
+              unitPriceCentsSnapshot: i.unitPriceCentsSnapshot,
+              quantity: i.quantity,
+              lineTotalCents: i.lineTotalCents,
+              notes: i.notes ?? null,
+            };
+            return i.menuItemId != null ? { ...base, menuItemId: i.menuItemId } : base;
+          }),
         },
       },
     });

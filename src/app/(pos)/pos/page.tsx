@@ -21,6 +21,9 @@ export default async function PosPage() {
     );
   }
 
+  /** Show "Artículo personalizado" to admin/manager. Set to true to show to all POS users. */
+  const canAddCustomItem = true;
+
   return (
     <PosBuilder
       locations={locations}
@@ -28,6 +31,7 @@ export default async function PosPage() {
         taxRateBps: restaurant.taxRateBps,
         serviceChargeBps: restaurant.serviceChargeBps,
       }}
+      canAddCustomItem={canAddCustomItem}
     />
   );
 }
