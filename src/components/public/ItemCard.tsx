@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDOP } from "@/lib/money";
+import { siteConfig } from "@/components/landing/site-config";
 import { DEFAULT_FOOD_IMAGE } from "./constants";
 import { useCartOptional } from "./CartContext";
 
@@ -60,7 +61,7 @@ export function ItemCard({
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={imageUrl || DEFAULT_FOOD_IMAGE}
+          src={imageUrl || siteConfig.logoUrl || DEFAULT_FOOD_IMAGE}
           alt={name}
           className="h-full w-full object-cover"
           sizes="(max-width: 640px) 50vw, 33vw"

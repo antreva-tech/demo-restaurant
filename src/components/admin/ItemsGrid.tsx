@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { createItem, updateItem } from "@/server/actions/items";
 import { formatDOP } from "@/lib/money";
+import { siteConfig } from "@/components/landing/site-config";
 import { DEFAULT_FOOD_IMAGE } from "@/components/public/constants";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import type { MenuItem, Category, Location } from "@prisma/client";
@@ -36,7 +37,7 @@ function ItemGridCard({
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={item.imageUrl || DEFAULT_FOOD_IMAGE}
+          src={item.imageUrl || siteConfig.logoUrl || DEFAULT_FOOD_IMAGE}
           alt={item.name}
           className="h-full w-full object-cover transition group-hover:scale-105"
           sizes="(max-width: 640px) 50vw, 25vw"
