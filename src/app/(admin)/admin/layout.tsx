@@ -11,7 +11,7 @@ import { Logo } from "@/components/landing/Logo";
 async function AdminNav() {
   const session = await auth();
   const ok = canAccessAdmin(session);
-  if (!ok) redirect("/login");
+  if (!ok) redirect("/login/admin");
 
   const linkClass =
     "rounded-lg px-3 py-2 text-menu-cream/95 hover:bg-menu-gold/25 hover:text-menu-cream transition-colors";

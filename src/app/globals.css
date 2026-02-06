@@ -56,6 +56,24 @@ body {
   scroll-behavior: smooth;
 }
 
+/* POS mobile: slide-in order drawer from the right. */
+@keyframes pos-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.pos-drawer-panel {
+  animation: pos-drawer-in 0.25s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pos-drawer-panel {
+    animation: none;
+  }
+}
+
 /* Premium form controls: focus ring, subtle shadow. */
 .input-premium {
   @apply rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-antreva-navy shadow-sm transition-shadow;

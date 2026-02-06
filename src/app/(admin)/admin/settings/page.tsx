@@ -7,7 +7,7 @@ import { SettingsForm } from "@/components/admin/SettingsForm";
 export default async function AdminSettingsPage() {
   const session = await auth();
   const restaurantId = (session as { restaurantId?: string })?.restaurantId;
-  if (!restaurantId) redirect("/login");
+  if (!restaurantId) redirect("/login/admin");
 
   const restaurant = await getRestaurantForAdmin(restaurantId);
   if (!restaurant) redirect("/admin");

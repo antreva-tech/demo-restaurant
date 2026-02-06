@@ -7,7 +7,7 @@ import { ItemsGrid } from "@/components/admin/ItemsGrid";
 export default async function AdminItemsPage() {
   const session = await auth();
   const restaurantId = (session as { restaurantId?: string })?.restaurantId;
-  if (!restaurantId) redirect("/login");
+  if (!restaurantId) redirect("/login/admin");
 
   const [items, categories, locations] = await Promise.all([
     getItemsForAdmin(restaurantId),

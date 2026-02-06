@@ -88,13 +88,8 @@ export default function PosLoginPage() {
           </button>
         </form>
         <p className="mt-4 text-center text-sm text-gray-500">
-          <Link href="/login" className="text-antreva-blue hover:underline">
+          <Link href="/login/admin" className="text-antreva-blue hover:underline">
             Acceso administración
-          </Link>
-        </p>
-        <p className="mt-2 text-center text-sm text-gray-500">
-          <Link href="/" className="text-antreva-blue hover:underline">
-            Volver al inicio
           </Link>
         </p>
       </div>

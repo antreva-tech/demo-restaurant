@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 export default async function AdminPagosPage() {
   const session = await auth();
   const restaurantId = (session as { restaurantId?: string })?.restaurantId;
-  if (!restaurantId) redirect("/login");
+  if (!restaurantId) redirect("/login/admin");
 
   const [integrationsRes, locations] = await Promise.all([
     getIntegrationsForAdmin(),

@@ -9,20 +9,43 @@ import { formatDOP, computeOrderTotalInclusive } from "@/lib/money";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { PosItemCard } from "@/components/pos/PosItemCard";
-import { DEFAULT_FOOD_IMAGE, getProductCardImageUrl } from "@/components/public/constants";
+import { PosOrderPanelContent, type OrderLine } from "@/components/pos/PosOrderPanelContent";
+import { POS_ORDER_STORAGE_KEY } from "@/lib/pos-storage";
 import type { Category, MenuItem, Location } from "@prisma/client";
 import type { EnabledIntegrationsForPos } from "@/server/payments/providers/registry";
 import QRCode from "qrcode";
 
-export interface OrderLine {
-  /** null = custom/off-menu item added by manager or admin. */
-  menuItemId: string | null;
-  nameSnapshot: string;
-  unitPriceCentsSnapshot: number;
-  quantity: number;
-  lineTotalCents: number;
-  notes?: string;
+/** Returns true if value looks like a valid OrderLine. */
+function isOrderLine(x: unknown): x is OrderLine {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "nameSnapshot" in x &&
+    "unitPriceCentsSnapshot" in x &&
+    "quantity" in x &&
+    "lineTotalCents" in x
+  );
 }
+
+function parseStoredOrder(raw: string | null): { order: OrderLine[]; orderNotes: string } {
+  if (!raw) return { order: [], orderNotes: "" };
+  try {
+    const data = JSON.parse(raw) as unknown;
+    if (!data || typeof data !== "object") return { order: [], orderNotes: "" };
+    const order = Array.isArray((data as { order?: unknown }).order)
+      ? ((data as { order: unknown[] }).order.filter(isOrderLine))
+      : [];
+    const orderNotes = typeof (data as { orderNotes?: string }).orderNotes === "string"
+      ? (data as { orderNotes: string }).orderNotes
+      : "";
+    return { order, orderNotes };
+  } catch {
+    return { order: [], orderNotes: "" };
+  }
+}
+
+/** Re-export for consumers that import from PosBuilder. */
+export type { OrderLine } from "@/components/pos/PosOrderPanelContent";
 
 interface PosBuilderProps {
   locations: Location[];
@@ -50,8 +73,14 @@ export function PosBuilder({
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [order, setOrder] = useState<OrderLine[]>([]);
-  const [orderNotes, setOrderNotes] = useState("");
+  const [order, setOrder] = useState<OrderLine[]>(() => {
+    if (typeof window === "undefined") return [];
+    return parseStoredOrder(sessionStorage.getItem(POS_ORDER_STORAGE_KEY)).order;
+  });
+  const [orderNotes, setOrderNotes] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return parseStoredOrder(sessionStorage.getItem(POS_ORDER_STORAGE_KEY)).orderNotes;
+  });
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode | null>(null);
   const [cashReceived, setCashReceived] = useState("");
@@ -72,6 +101,8 @@ export function PosBuilder({
   /** Transfer modal: orderId + optional reference. */
   const [transferModal, setTransferModal] = useState<{ orderId: string } | null>(null);
   const [transferRef, setTransferRef] = useState("");
+  /** On phone: when true, show slide-over order panel with blurred backdrop. */
+  const [orderPanelOpen, setOrderPanelOpen] = useState(false);
 
   useEffect(() => {
     if (!locationId) return;
@@ -91,6 +122,14 @@ export function PosBuilder({
       if (!("error" in res)) setIntegrations({ cardLink: res.cardLink, terminal: res.terminal });
     });
   }, [locationId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem(
+      POS_ORDER_STORAGE_KEY,
+      JSON.stringify({ order, orderNotes })
+    );
+  }, [order, orderNotes]);
 
   function addItem(item: MenuItem) {
     if (!item.isAvailable) return;
@@ -317,16 +356,22 @@ export function PosBuilder({
 
   const availableItems = items.filter((i) => i.isAvailable);
 
+  /** Opens checkout and on phone closes the order drawer. */
+  function handleCheckoutClick() {
+    setCheckoutOpen(true);
+    setOrderPanelOpen(false);
+  }
+
   return (
-    <div className="flex flex-1 gap-4 overflow-hidden p-4">
-      <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-24 md:flex-row md:pb-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {locations.length > 1 && (
-          <div className="mb-2">
+          <div className="mb-2 shrink-0">
             <label className="mr-2 text-sm text-gray-600">Ubicación:</label>
             <select
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1"
+              className="min-h-[44px] touch-manipulation rounded border border-gray-300 px-3 py-2"
             >
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>{loc.name}</option>
@@ -337,103 +382,84 @@ export function PosBuilder({
         {loading ? (
           <p className="text-gray-600">Cargando menú…</p>
         ) : (
-          <div className="flex-1 overflow-auto rounded-lg border bg-white p-4">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-white p-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
               {availableItems.map((item) => (
-                <PosItemCard key={item.id} item={item} onAdd={addItem} />
+                <PosItemCard
+                  key={item.id}
+                  item={item}
+                  onAdd={addItem}
+                  quantityInOrder={order.reduce((s, l) => (l.menuItemId === item.id ? s + l.quantity : s), 0)}
+                />
               ))}
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex w-96 flex-col rounded-lg border bg-white shadow">
-        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">Orden actual</h2>
-        </div>
-        <div className="flex-1 overflow-auto p-4">
-          {order.length === 0 ? (
-            <p className="text-sm text-gray-500">Agregue productos</p>
-          ) : (
-            <ul className="space-y-4">
-              {order.map((line, i) => {
-                const isCustom = line.menuItemId === null;
-                const menuItem = isCustom ? null : items.find((it) => it.id === line.menuItemId);
-                const thumbResolved = getProductCardImageUrl(menuItem?.imageUrl ?? null, "");
-                const thumbSrc = isCustom || (line.menuItemId && failedThumbIds.has(line.menuItemId))
-                  ? DEFAULT_FOOD_IMAGE
-                  : thumbResolved.src;
-                return (
-                  <li key={i} className="flex gap-3 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
-                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-gray-100">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={thumbSrc}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={() => line.menuItemId && setFailedThumbIds((prev) => new Set(prev).add(line.menuItemId!))}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-gray-900">{line.nameSnapshot}</div>
-                      <div className="mt-1 text-xs text-gray-600">
-                        {formatDOP(line.unitPriceCentsSnapshot)} × {line.quantity}
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <button type="button" onClick={() => updateQty(i, -1)} className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-700 hover:bg-gray-100">−</button>
-                        <span className="min-w-[1.5rem] text-center text-sm font-medium text-gray-900">{line.quantity}</span>
-                        <button type="button" onClick={() => updateQty(i, 1)} className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-700 hover:bg-gray-100">+</button>
-                      </div>
-                      <input
-                        type="text"
-                        value={line.notes ?? ""}
-                        onChange={(e) => updateLineNotes(i, e.target.value)}
-                        placeholder="Modificaciones (ej. sin cebolla)"
-                        className="mt-2 w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-900 placeholder:text-gray-400"
-                        aria-label={`Notas para ${line.nameSnapshot}`}
-                      />
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-sm font-semibold text-gray-900">{formatDOP(line.lineTotalCents)}</div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {canAddCustomItem && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="mt-4 w-full"
-              onClick={() => setCustomItemOpen(true)}
-            >
-              + Artículo personalizado
-            </Button>
-          )}
-          <label className="mt-4 block text-sm font-medium text-gray-700">Notas del pedido</label>
-          <textarea
-            placeholder="Instrucciones o comentarios..."
-            value={orderNotes}
-            onChange={(e) => setOrderNotes(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 p-2 text-sm text-gray-900 placeholder:text-gray-400"
-            rows={2}
-          />
-        </div>
-        <div className="border-t border-gray-200 bg-gray-50 p-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-base font-semibold text-gray-900">Total</span>
-            <span className="text-lg font-bold text-gray-900">{formatDOP(totalCents)}</span>
-          </div>
-          <Button
-            className="mt-4 w-full"
-            onClick={() => setCheckoutOpen(true)}
-            disabled={order.length === 0}
-          >
-            Cobrar
-          </Button>
-        </div>
+      {/* Desktop/tablet: order panel as sidebar (landscape-friendly). */}
+      <div className="hidden min-h-0 min-w-0 shrink-0 flex-col overflow-hidden rounded-lg border bg-white shadow md:flex md:w-80 lg:w-96">
+        <PosOrderPanelContent
+          order={order}
+          items={items}
+          failedThumbIds={failedThumbIds}
+          setFailedThumbIds={setFailedThumbIds}
+          updateQty={updateQty}
+          updateLineNotes={updateLineNotes}
+          orderNotes={orderNotes}
+          setOrderNotes={setOrderNotes}
+          totalCents={totalCents}
+          onCheckout={handleCheckoutClick}
+          canAddCustomItem={canAddCustomItem}
+          onAddCustomItem={() => setCustomItemOpen(true)}
+        />
       </div>
+
+      {/* Phone: floating "Completar pedido" when order has items; opens order drawer. */}
+      {order.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-4 safe-area-bottom md:hidden">
+          <button
+            type="button"
+            onClick={() => setOrderPanelOpen(true)}
+            className="w-full min-h-[52px] touch-manipulation rounded-xl bg-antreva-blue px-6 py-3 text-base font-semibold text-white shadow-lg transition active:opacity-90"
+            aria-label="Ver orden y cobrar"
+          >
+            Completar pedido {order.length > 0 && `(${order.length})`}
+          </button>
+        </div>
+      )}
+
+      {/* Phone: slide-over order panel with blurred backdrop. */}
+      {orderPanelOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden"
+            aria-hidden
+            onClick={() => setOrderPanelOpen(false)}
+          />
+          <div
+            className="pos-drawer-panel fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-2xl safe-area-top safe-area-bottom md:hidden"
+            role="dialog"
+            aria-label="Orden actual"
+          >
+            <PosOrderPanelContent
+              order={order}
+              items={items}
+              failedThumbIds={failedThumbIds}
+              setFailedThumbIds={setFailedThumbIds}
+              updateQty={updateQty}
+              updateLineNotes={updateLineNotes}
+              orderNotes={orderNotes}
+              setOrderNotes={setOrderNotes}
+              totalCents={totalCents}
+              onCheckout={handleCheckoutClick}
+              canAddCustomItem={canAddCustomItem}
+              onAddCustomItem={() => setCustomItemOpen(true)}
+              onClose={() => setOrderPanelOpen(false)}
+            />
+          </div>
+        </>
+      )}
 
       <Modal open={customItemOpen} onClose={() => setCustomItemOpen(false)} title="Artículo personalizado">
         <div className="space-y-4">

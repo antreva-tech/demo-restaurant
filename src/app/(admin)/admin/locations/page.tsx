@@ -7,7 +7,7 @@ import { LocationsTable } from "@/components/admin/LocationsTable";
 export default async function AdminLocationsPage() {
   const session = await auth();
   const restaurantId = (session as { restaurantId?: string })?.restaurantId;
-  if (!restaurantId) redirect("/login");
+  if (!restaurantId) redirect("/login/admin");
 
   const locations = await getLocationsForAdmin(restaurantId);
 
