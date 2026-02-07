@@ -3,13 +3,16 @@
 import { useState, useEffect } from "react";
 import { getPosMenu } from "@/server/actions/pos";
 import { createOrderAndPay, createOrderOpen } from "@/server/actions/orders";
-import { createPaymentLink, checkPaymentStatus, confirmTerminalPayment, completeTransferPayment } from "@/server/actions/payments";
+import { createPaymentLink, checkPaymentStatus, confirmTerminalPayment, completeTransferPayment, payOpenOrderWithCash } from "@/server/actions/payments";
+import { getOpenOrdersForPosAction } from "@/server/actions/pos";
 import { getIntegrationsForPos } from "@/server/actions/payment-integrations";
 import { formatDOP, computeOrderTotalInclusive } from "@/lib/money";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { PosItemCard } from "@/components/pos/PosItemCard";
 import { PosOrderPanelContent, type OrderLine } from "@/components/pos/PosOrderPanelContent";
+import { PosUnpaidOrdersPanel, type OpenOrderForPos } from "@/components/pos/PosUnpaidOrdersPanel";
+import { PosPayOpenOrderModal } from "@/components/pos/PosPayOpenOrderModal";
 import { POS_ORDER_STORAGE_KEY } from "@/lib/pos-storage";
 import type { Category, MenuItem, Location } from "@prisma/client";
 import type { EnabledIntegrationsForPos } from "@/server/payments/providers/registry";
@@ -91,18 +94,29 @@ export function PosBuilder({
   const [customPriceRd, setCustomPriceRd] = useState("");
   /** Deferred payment: order created OPEN, then we show link/terminal/transfer UI. */
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
-  /** Card link modal: url + paymentId; if not_implemented show fallback. */
-  const [linkModal, setLinkModal] = useState<{ url: string; paymentId: string } | { error: "not_implemented"; orderId: string } | null>(null);
+  /** Card link modal: url + paymentId (+ orderId when paying open order); or not_implemented fallback. */
+  const [linkModal, setLinkModal] = useState<{ url: string; paymentId: string; orderId?: string } | { error: "not_implemented"; orderId: string } | null>(null);
   const [linkStatus, setLinkStatus] = useState<"PENDING" | "SUCCEEDED" | "CHECKING">("PENDING");
-  /** Terminal modal: orderId + integrationId for manual capture. */
-  const [terminalModal, setTerminalModal] = useState<{ orderId: string; integrationId: string } | null>(null);
+  /** Terminal modal: orderId + integrationId + optional totalCents when paying an open order. */
+  const [terminalModal, setTerminalModal] = useState<{ orderId: string; integrationId: string; totalCents?: number } | null>(null);
   const [terminalApproval, setTerminalApproval] = useState("");
   const [terminalLast4, setTerminalLast4] = useState("");
-  /** Transfer modal: orderId + optional reference. */
-  const [transferModal, setTransferModal] = useState<{ orderId: string } | null>(null);
+  /** Transfer modal: orderId + optional totalCents when paying an open order. */
+  const [transferModal, setTransferModal] = useState<{ orderId: string; totalCents?: number } | null>(null);
   const [transferRef, setTransferRef] = useState("");
   /** On phone: when true, show slide-over order panel with blurred backdrop. */
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
+  /** "Cobrar después" flow: show name/phone form in checkout modal. */
+  const [chargeLaterForm, setChargeLaterForm] = useState(false);
+  const [chargeLaterName, setChargeLaterName] = useState("");
+  const [chargeLaterPhone, setChargeLaterPhone] = useState("");
+  /** Unpaid orders list panel and pay-selected-order flow. */
+  const [unpaidListOpen, setUnpaidListOpen] = useState(false);
+  const [selectedOpenOrder, setSelectedOpenOrder] = useState<OpenOrderForPos | null>(null);
+  const [refreshUnpaidTrigger, setRefreshUnpaidTrigger] = useState(0);
+  /** Cash modal for paying an existing OPEN order. */
+  const [payOpenOrderCashModal, setPayOpenOrderCashModal] = useState<{ orderId: string; totalCents: number } | null>(null);
+  const [payOpenOrderCashReceived, setPayOpenOrderCashReceived] = useState("");
 
   useEffect(() => {
     if (!locationId) return;
@@ -249,15 +263,22 @@ export function PosBuilder({
 
   async function handleTransferConfirm() {
     if (!transferModal) return;
+    const wasOrderId = transferModal.orderId;
     setPayLoading(true);
-    const res = await completeTransferPayment(transferModal.orderId, transferRef.trim() || undefined);
+    const res = await completeTransferPayment(wasOrderId, transferRef.trim() || undefined);
     setPayLoading(false);
     if (res?.ok) {
-      setOrder([]);
-      setOrderNotes("");
       setTransferModal(null);
       setTransferRef("");
-      setOpenOrderId(null);
+      if (openOrderId === wasOrderId) {
+        setOrder([]);
+        setOrderNotes("");
+        setOpenOrderId(null);
+      }
+      if (selectedOpenOrder?.id === wasOrderId) {
+        setSelectedOpenOrder(null);
+        setRefreshUnpaidTrigger((t) => t + 1);
+      }
     } else {
       alert((res as { error?: string })?.error ?? "Error");
     }
@@ -310,17 +331,26 @@ export function PosBuilder({
       alert("Código de aprobación es requerido.");
       return;
     }
+    const wasOrderId = terminalModal.orderId;
     setPayLoading(true);
-    const res = await confirmTerminalPayment(terminalModal.orderId, terminalModal.integrationId, {
+    const res = await confirmTerminalPayment(wasOrderId, terminalModal.integrationId, {
       approvalCode: terminalApproval.trim(),
       last4: terminalLast4.trim() || undefined,
     });
     setPayLoading(false);
     if (res?.ok) {
-      setOrder([]);
-      setOrderNotes("");
       setTerminalModal(null);
-      setOpenOrderId(null);
+      setTerminalApproval("");
+      setTerminalLast4("");
+      if (openOrderId === wasOrderId) {
+        setOrder([]);
+        setOrderNotes("");
+        setOpenOrderId(null);
+      }
+      if (selectedOpenOrder?.id === wasOrderId) {
+        setSelectedOpenOrder(null);
+        setRefreshUnpaidTrigger((t) => t + 1);
+      }
     } else {
       alert((res as { error?: string })?.error ?? "Error");
     }
@@ -331,10 +361,17 @@ export function PosBuilder({
     const res = await checkPaymentStatus(paymentId);
     if (res?.ok && res.status === "SUCCEEDED") {
       setLinkStatus("SUCCEEDED");
-      setOrder([]);
-      setOrderNotes("");
+      const wasOrderId = linkModal && "orderId" in linkModal ? linkModal.orderId : openOrderId;
       setLinkModal(null);
       setOpenOrderId(null);
+      if (openOrderId === wasOrderId) {
+        setOrder([]);
+        setOrderNotes("");
+      }
+      if (selectedOpenOrder?.id === wasOrderId) {
+        setSelectedOpenOrder(null);
+        setRefreshUnpaidTrigger((t) => t + 1);
+      }
     } else {
       setLinkStatus("PENDING");
       if (res?.error) alert(res.error);
@@ -342,7 +379,7 @@ export function PosBuilder({
   }
 
   function resetAfterLinkFallback() {
-    if (linkModal && "orderId" in linkModal && linkModal.error === "not_implemented") {
+    if (linkModal && "error" in linkModal && linkModal.error === "not_implemented") {
       const orderId = linkModal.orderId;
       const firstTerminal = integrations.terminal[0];
       if (firstTerminal) {
@@ -353,6 +390,78 @@ export function PosBuilder({
       }
     }
   }
+
+  /** "Cobrar después": create OPEN order with customer name so it can be found in "Órdenes por cobrar". */
+  async function handleChargeLaterSubmit() {
+    const name = chargeLaterName.trim();
+    if (!name) {
+      alert("Nombre del cliente es requerido para cobrar después.");
+      return;
+    }
+    if (order.length === 0) return;
+    setPayLoading(true);
+    const res = await createOrderOpen({
+      locationId,
+      items: order,
+      orderNotes: orderNotes || undefined,
+      customerName: name,
+      customerPhone: chargeLaterPhone.trim() || undefined,
+    });
+    setPayLoading(false);
+    if (res?.ok && res.orderId) {
+      setOrder([]);
+      setOrderNotes("");
+      setCheckoutOpen(false);
+      setChargeLaterForm(false);
+      setChargeLaterName("");
+      setChargeLaterPhone("");
+      const num = "orderNumber" in res && typeof res.orderNumber === "number" ? res.orderNumber : "";
+      alert(num ? `Orden #${num} guardada para cobrar después.` : "Orden guardada para cobrar después.");
+      setRefreshUnpaidTrigger((t) => t + 1);
+    } else {
+      alert((res as { error?: string })?.error ?? "Error al guardar");
+    }
+  }
+
+  /** Pay selected OPEN order with card link: create payment link then show QR/link modal. */
+  async function handlePayOpenOrderCardLink(integrationId: string) {
+    if (!selectedOpenOrder) return;
+    setPayLoading(true);
+    const linkRes = await createPaymentLink(selectedOpenOrder.id, integrationId);
+    setPayLoading(false);
+    if (linkRes?.ok && "url" in linkRes) {
+      setLinkModal({ url: linkRes.url, paymentId: linkRes.paymentId, orderId: selectedOpenOrder.id });
+      setLinkStatus("PENDING");
+    } else if (linkRes?.error === "not_implemented") {
+      setLinkModal({ error: "not_implemented", orderId: selectedOpenOrder.id });
+    } else {
+      alert((linkRes as { error?: string })?.error ?? "Error");
+    }
+  }
+
+  /** Pay selected OPEN order with cash. */
+  async function handlePayOpenOrderCash() {
+    if (!payOpenOrderCashModal) return;
+    const cents = Math.round(parseFloat(payOpenOrderCashReceived || "0") * 100);
+    if (cents < payOpenOrderCashModal.totalCents) {
+      alert("Efectivo recibido debe ser mayor o igual al total.");
+      return;
+    }
+    setPayLoading(true);
+    const res = await payOpenOrderWithCash(payOpenOrderCashModal.orderId, cents);
+    setPayLoading(false);
+    if (res?.ok) {
+      setPayOpenOrderCashModal(null);
+      setPayOpenOrderCashReceived("");
+      setSelectedOpenOrder(null);
+      setRefreshUnpaidTrigger((t) => t + 1);
+    } else {
+      alert((res as { error?: string })?.error ?? "Error");
+    }
+  }
+
+  const transferDisplayCents = transferModal?.totalCents ?? totalCents;
+  const terminalDisplayCents = terminalModal?.totalCents ?? totalCents;
 
   const availableItems = items.filter((i) => i.isAvailable);
 
@@ -365,20 +474,29 @@ export function PosBuilder({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 pb-24 md:flex-row md:pb-4">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {locations.length > 1 && (
-          <div className="mb-2 shrink-0">
-            <label className="mr-2 text-sm text-gray-600">Ubicación:</label>
-            <select
-              value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
-              className="min-h-[44px] touch-manipulation rounded border border-gray-300 px-3 py-2"
-            >
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>{loc.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="mb-2 shrink-0 flex flex-wrap items-center gap-2">
+          {locations.length > 1 && (
+            <>
+              <label className="mr-2 text-sm text-gray-600">Ubicación:</label>
+              <select
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+                className="min-h-[44px] touch-manipulation rounded border border-gray-300 px-3 py-2"
+              >
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </>
+          )}
+          <Button
+            variant="goldSecondary"
+            onClick={() => setUnpaidListOpen(true)}
+            className="ml-auto md:ml-0"
+          >
+            Órdenes por cobrar
+          </Button>
+        </div>
         {loading ? (
           <p className="text-gray-600">Cargando menú…</p>
         ) : (
@@ -501,9 +619,42 @@ export function PosBuilder({
         </div>
       </Modal>
 
-      <Modal open={checkoutOpen} onClose={() => { setCheckoutOpen(false); setPaymentMode(null); }} title="Cobrar">
+      <Modal open={checkoutOpen} onClose={() => { setCheckoutOpen(false); setPaymentMode(null); setChargeLaterForm(false); }} title="Cobrar">
         <div className="space-y-4 text-gray-900">
           <div className="text-xl font-bold text-gray-900">Total: {formatDOP(totalCents)}</div>
+          {chargeLaterForm ? (
+            <>
+              <p className="text-sm text-gray-600">Guardar orden para cobrar después. Nombre del cliente es requerido para buscarla luego.</p>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-900">Nombre del cliente *</label>
+                <input
+                  type="text"
+                  value={chargeLaterName}
+                  onChange={(e) => setChargeLaterName(e.target.value)}
+                  placeholder="Ej. Juan Pérez"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-900">Teléfono (opcional)</label>
+                <input
+                  type="text"
+                  value={chargeLaterPhone}
+                  onChange={(e) => setChargeLaterPhone(e.target.value)}
+                  placeholder="Ej. 809-555-0000"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setChargeLaterForm(false)}>Atrás</Button>
+                <Button onClick={handleChargeLaterSubmit} disabled={payLoading || !chargeLaterName.trim()}>
+                  {payLoading ? "Guardando…" : "Guardar para cobrar después"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
           <div>
             <label className="mb-2 block text-sm font-semibold text-gray-900">Método de pago</label>
             <div className="flex flex-wrap gap-2">
@@ -535,6 +686,9 @@ export function PosBuilder({
                   Tarjeta (Terminal)
                 </Button>
               )}
+              <Button variant="secondary" onClick={() => setChargeLaterForm(true)}>
+                Cobrar después
+              </Button>
             </div>
           </div>
           {paymentMode === "CASH" && (
@@ -564,6 +718,8 @@ export function PosBuilder({
             <div className="flex justify-end">
               <Button variant="secondary" onClick={() => setCheckoutOpen(false)}>Cancelar</Button>
             </div>
+          )}
+            </>
           )}
         </div>
       </Modal>
@@ -611,9 +767,9 @@ export function PosBuilder({
       )}
 
       {terminalModal && (
-        <Modal open onClose={() => { setTerminalModal(null); setOpenOrderId(null); }} title="Tarjeta (Terminal)">
+        <Modal open onClose={() => { setTerminalModal(null); setOpenOrderId(null); setSelectedOpenOrder((o) => (o?.id === terminalModal.orderId ? null : o)); }} title="Tarjeta (Terminal)">
           <div className="space-y-4">
-            <p className="text-lg font-semibold text-gray-900">Monto a cobrar: {formatDOP(totalCents)}</p>
+            <p className="text-lg font-semibold text-gray-900">Monto a cobrar: {formatDOP(terminalDisplayCents)}</p>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-900">Código de aprobación *</label>
               <input
@@ -648,9 +804,9 @@ export function PosBuilder({
       )}
 
       {transferModal && (
-        <Modal open onClose={() => { setTransferModal(null); setOpenOrderId(null); }} title="Transferencia">
+        <Modal open onClose={() => { setTransferModal(null); setOpenOrderId(null); setSelectedOpenOrder((o) => (o?.id === transferModal.orderId ? null : o)); }} title="Transferencia">
           <div className="space-y-4">
-            <p className="text-lg font-semibold text-gray-900">Monto: {formatDOP(totalCents)}</p>
+            <p className="text-lg font-semibold text-gray-900">Monto: {formatDOP(transferDisplayCents)}</p>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-900">Referencia de transferencia (opcional)</label>
               <input
@@ -662,11 +818,75 @@ export function PosBuilder({
               />
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => { setTransferModal(null); setOpenOrderId(null); }}>
+              <Button variant="secondary" className="flex-1" onClick={() => { setTransferModal(null); setOpenOrderId(null); setSelectedOpenOrder((o) => (o?.id === transferModal.orderId ? null : o)); }}>
                 Cancelar
               </Button>
               <Button className="flex-1" onClick={handleTransferConfirm} disabled={payLoading}>
                 {payLoading ? "Guardando…" : "Confirmar pago"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {unpaidListOpen && (
+        <Modal open onClose={() => setUnpaidListOpen(false)} title="Órdenes por cobrar">
+          <div className="max-h-[80vh] min-h-[300px] w-full max-w-md">
+            <PosUnpaidOrdersPanel
+              locationId={locationId}
+              refreshTrigger={refreshUnpaidTrigger}
+              onSelectOrder={(o) => {
+                setSelectedOpenOrder(o);
+                setUnpaidListOpen(false);
+              }}
+              onClose={() => setUnpaidListOpen(false)}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {selectedOpenOrder && (
+        <PosPayOpenOrderModal
+          order={selectedOpenOrder}
+          restaurant={restaurant}
+          integrations={integrations}
+          onClose={() => setSelectedOpenOrder(null)}
+          onPayCash={() => setPayOpenOrderCashModal({ orderId: selectedOpenOrder.id, totalCents: selectedOpenOrder.totalCents })}
+          onPayTransfer={() => setTransferModal({ orderId: selectedOpenOrder.id, totalCents: selectedOpenOrder.totalCents })}
+          onPayCardLink={handlePayOpenOrderCardLink}
+          onPayCardTerminal={(integrationId) => setTerminalModal({ orderId: selectedOpenOrder.id, integrationId, totalCents: selectedOpenOrder.totalCents })}
+        />
+      )}
+
+      {payOpenOrderCashModal && (
+        <Modal open onClose={() => { setPayOpenOrderCashModal(null); setPayOpenOrderCashReceived(""); }} title="Efectivo">
+          <div className="space-y-4">
+            <p className="text-lg font-semibold text-gray-900">Total: {formatDOP(payOpenOrderCashModal.totalCents)}</p>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-900">Efectivo recibido (RD$)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={payOpenOrderCashReceived}
+                onChange={(e) => setPayOpenOrderCashReceived(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              />
+            </div>
+            {Math.round(parseFloat(payOpenOrderCashReceived || "0") * 100) >= payOpenOrderCashModal.totalCents && (
+              <p className="text-green-700 font-semibold">
+                Cambio: {formatDOP(Math.round(parseFloat(payOpenOrderCashReceived || "0") * 100) - payOpenOrderCashModal.totalCents)}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => { setPayOpenOrderCashModal(null); setPayOpenOrderCashReceived(""); }}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handlePayOpenOrderCash}
+                disabled={payLoading || Math.round(parseFloat(payOpenOrderCashReceived || "0") * 100) < payOpenOrderCashModal.totalCents}
+              >
+                {payLoading ? "Guardando…" : "Marcar como pagado"}
               </Button>
             </div>
           </div>

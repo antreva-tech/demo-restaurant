@@ -43,3 +43,27 @@ export async function getCategoriesAndItemsForPos(
   ]);
   return { categories, items };
 }
+
+/** OPEN orders for POS "Órdenes por cobrar" list; optional search by customer name. */
+export async function getOpenOrdersForPos(
+  restaurantId: string,
+  locationId: string,
+  search?: string
+) {
+  const where = {
+    restaurantId,
+    locationId,
+    status: "OPEN" as const,
+    ...(search?.trim() && {
+      customerName: { contains: search.trim(), mode: "insensitive" as const },
+    }),
+  };
+  return prisma.order.findMany({
+    where,
+    include: {
+      items: { orderBy: { id: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+}

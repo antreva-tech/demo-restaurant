@@ -234,3 +234,39 @@ export async function completeTransferPayment(
   revalidatePath("/admin");
   return { ok: true };
 }
+
+/**
+ * Marks an existing OPEN order as PAID with cash (no Payment record; consistent with createOrderAndPay).
+ * Used when collecting payment for an order saved via "Cobrar después".
+ */
+export async function payOpenOrderWithCash(orderId: string, cashReceivedCents: number) {
+  const session = await auth();
+  const restaurantId = (session as { restaurantId?: string })?.restaurantId;
+  if (!restaurantId) return { error: "No autorizado" };
+
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, restaurantId, status: "OPEN" },
+  });
+  if (!order) return { error: "Orden no encontrada o ya pagada" };
+
+  if (cashReceivedCents < order.totalCents)
+    return { error: "Efectivo recibido debe ser mayor o igual al total" };
+
+  const changeGivenCents = cashReceivedCents - order.totalCents;
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: "PAID",
+      paymentMethod: "CASH",
+      paymentChannel: "CASH",
+      cashReceivedCents,
+      changeGivenCents,
+      paidAt: new Date(),
+    },
+  });
+  revalidatePath("/pos");
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  return { ok: true };
+}

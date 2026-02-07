@@ -29,14 +29,17 @@ export type CreateOrderItem = {
 };
 
 /**
- * Creates an order in OPEN status (for deferred payment: link, terminal, transfer).
- * Returns orderId. Caller then creates Payment and later marks Order PAID.
+ * Creates an order in OPEN status (for deferred payment: link, terminal, transfer, or charge later).
+ * Returns orderId. Caller then creates Payment and later marks Order PAID, or uses charge-later flow.
+ * customerName/customerPhone allow searching the order in "Órdenes por cobrar".
  */
 export async function createOrderOpen(params: {
   locationId: string;
   items: CreateOrderItem[];
   orderNotes?: string;
   discountCents?: number;
+  customerName?: string;
+  customerPhone?: string;
 }) {
   const session = await auth();
   const restaurantId = (session as { restaurantId?: string })?.restaurantId;
@@ -66,6 +69,8 @@ export async function createOrderOpen(params: {
         orderNumber,
         status: "OPEN",
         notes: params.orderNotes ?? null,
+        customerName: params.customerName?.trim() || null,
+        customerPhone: params.customerPhone?.trim() || null,
         subtotalCents,
         taxCents,
         serviceChargeCents,
@@ -89,7 +94,7 @@ export async function createOrderOpen(params: {
 
   revalidatePath("/admin/orders");
   revalidatePath("/pos");
-  return { ok: true, orderId: order.id };
+  return { ok: true, orderId: order.id, orderNumber: order.orderNumber };
 }
 
 export async function createOrderAndPay(params: {
