@@ -4,6 +4,8 @@ import bcrypt from "bcrypt";
 import { prisma } from "@/lib/db";
 import { authSecret } from "@/lib/env";
 import { Role } from "@prisma/client";
+import { createRateLimiter, getClientIp } from "@/lib/rate-limit";
+import { headers } from "next/headers";
 
 declare module "next-auth" {
   interface Session {
@@ -12,6 +14,12 @@ declare module "next-auth" {
     user: { id: string; email?: string | null; name?: string | null; image?: string | null };
   }
 }
+
+/**
+ * Rate limiter for login attempts: 10 attempts per 5-minute window per IP.
+ * Protects against brute-force attacks on credentials and PIN providers.
+ */
+const loginLimiter = createRateLimiter({ maxRequests: 10, windowSec: 300 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: authSecret ?? undefined,
@@ -25,6 +33,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
+        // Rate limit by client IP.
+        const hdrs = await headers();
+        const ip = getClientIp(hdrs);
+        const rl = loginLimiter.check(`cred:${ip}`);
+        if (!rl.allowed) return null;
+
         const email = credentials?.email as string | undefined;
         const password = credentials?.password as string | undefined;
         if (!email || !password) return null;
@@ -50,17 +64,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         employeeNumber: { label: "Número de empleado", type: "text" },
         pin: { label: "PIN", type: "password" },
+        restaurantSlug: { label: "Restaurant", type: "text" },
       },
       async authorize(credentials) {
+        // Rate limit by client IP.
+        const hdrs = await headers();
+        const ip = getClientIp(hdrs);
+        const rl = loginLimiter.check(`pin:${ip}`);
+        if (!rl.allowed) return null;
+
         const employeeNumber = credentials?.employeeNumber as string | undefined;
         const pin = credentials?.pin as string | undefined;
+        const restaurantSlug = credentials?.restaurantSlug as string | undefined;
         if (!employeeNumber?.trim() || !pin) return null;
+
+        // Require restaurantSlug to prevent cross-tenant PIN collisions.
+        // Build the query scoped to a specific restaurant.
+        const where: {
+          employeeNumber: string;
+          pinHash: { not: null };
+          isActive: true;
+          restaurant?: { slug: string };
+        } = {
+          employeeNumber: employeeNumber.trim(),
+          pinHash: { not: null },
+          isActive: true,
+        };
+        if (restaurantSlug?.trim()) {
+          where.restaurant = { slug: restaurantSlug.trim() };
+        }
+
         const user = await prisma.user.findFirst({
-          where: {
-            employeeNumber: employeeNumber.trim(),
-            pinHash: { not: null },
-            isActive: true,
-          },
+          where,
           include: { restaurant: true },
         });
         if (!user?.pinHash || !user.restaurant) return null;
@@ -76,7 +111,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
+  // 7-day session lifetime reduces the window of token compromise.
+  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
   callbacks: {
     jwt({ token, user }) {
       if (user) {

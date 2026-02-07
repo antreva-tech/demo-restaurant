@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDOP } from "@/lib/money";
 import { createOnlineOrder } from "@/server/actions/online-orders";
 import type { CartContextValue } from "./CartContext";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 const PANEL_DURATION_MS = 350;
 
@@ -29,6 +30,7 @@ export function CartPanel({ open, onClose, cart, restaurantSlug, locationSlug, t
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const turnstileToken = useRef<string | null>(null);
 
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
@@ -79,6 +81,7 @@ export function CartPanel({ open, onClose, cart, restaurantSlug, locationSlug, t
       customerName: name.trim(),
       customerPhone: phone.trim(),
       notes: notes.trim() || null,
+      turnstileToken: turnstileToken.current,
     });
     if ("ok" in result && result.ok) {
       cart.clearCart();
@@ -234,6 +237,12 @@ export function CartPanel({ open, onClose, cart, restaurantSlug, locationSlug, t
                   </div>
                 </div>
               </section>
+
+              {/* Cloudflare Turnstile anti-bot verification */}
+              <TurnstileWidget
+                onSuccess={(token) => { turnstileToken.current = token; }}
+                onExpire={() => { turnstileToken.current = null; }}
+              />
 
               {status === "error" && (
                 <p className="text-sm text-red-600" role="alert">

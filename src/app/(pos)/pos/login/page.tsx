@@ -4,9 +4,20 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import siteConfig from "@/config/site.json";
+
+/**
+ * Extracts the restaurant slug from the site config menuPath.
+ * E.g. "/r/demo/l/principal" -> "demo"
+ */
+function getRestaurantSlug(): string {
+  const match = siteConfig.menuPath?.match(/\/r\/([^/]+)/);
+  return match?.[1] ?? "";
+}
 
 /**
  * POS login: employee number + PIN. Redirects to /pos on success.
+ * Passes restaurantSlug to the auth provider to scope PIN lookups.
  */
 export default function PosLoginPage() {
   const router = useRouter();
@@ -23,6 +34,7 @@ export default function PosLoginPage() {
       const res = await signIn("pos-pin", {
         employeeNumber: employeeNumber.trim(),
         pin,
+        restaurantSlug: getRestaurantSlug(),
         redirect: false,
       });
       if (res?.error) {

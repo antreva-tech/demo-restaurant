@@ -6,6 +6,15 @@ import { prisma } from "@/lib/db";
 import { computeOrderTotalInclusive } from "@/lib/money";
 import { revalidatePath } from "next/cache";
 import { getNextOrderNumber } from "@/server/actions/orders";
+import { createRateLimiter, getClientIp } from "@/lib/rate-limit";
+import { verifyTurnstileToken } from "@/lib/turnstile";
+import { headers } from "next/headers";
+
+/**
+ * Rate limiter for online order creation: 5 orders per 10-minute window per IP.
+ * Prevents automated abuse and DoS on the unauthenticated public endpoint.
+ */
+const orderLimiter = createRateLimiter({ maxRequests: 5, windowSec: 600 });
 
 /** System email for the "Online" order user; unique per restaurant. */
 const onlineUserEmail = (restaurantId: string) => `online-${restaurantId}@system`;
@@ -53,7 +62,19 @@ export async function createOnlineOrder(params: {
   customerName: string;
   customerPhone: string;
   notes?: string | null;
+  /** Cloudflare Turnstile token from the client widget. Verified server-side when configured. */
+  turnstileToken?: string | null;
 }): Promise<{ ok: true; orderId: string; orderNumber: number } | { error: string }> {
+  // Rate limit by client IP to prevent automated order abuse.
+  const hdrs = await headers();
+  const ip = getClientIp(hdrs);
+  const rl = orderLimiter.check(`order:${ip}`);
+  if (!rl.allowed) return { error: "Demasiados pedidos. Intente de nuevo más tarde." };
+
+  // Verify Turnstile CAPTCHA token (skipped when TURNSTILE_SECRET_KEY is not set).
+  const turnstileResult = await verifyTurnstileToken(params.turnstileToken, ip);
+  if (!turnstileResult.success) return { error: turnstileResult.error };
+
   const { restaurantSlug, locationSlug, items, customerName, customerPhone, notes } = params;
 
   if (!items.length) return { error: "El carrito está vacío" };
@@ -189,14 +210,13 @@ async function notifyOrderCreated(payload: {
         }),
       });
       if (!res.ok) {
-        const err = await res.text();
-        console.warn("Resend email failed:", res.status, err);
+        console.warn("Resend email failed:", res.status);
       }
-    } catch (e) {
-      console.warn("Notify order created failed:", e);
+    } catch {
+      console.warn("Notify order created: email delivery failed");
     }
   } else {
-    console.info("Online order created (no email sent):", text);
+    console.info("Online order created (no email configured)");
   }
 }
 
@@ -257,10 +277,9 @@ async function sendWhatsAppOrderNotification(payload: {
       }).toString(),
     });
     if (!res.ok) {
-      const err = await res.text();
-      console.warn("Twilio WhatsApp failed:", res.status, err);
+      console.warn("Twilio WhatsApp failed:", res.status);
     }
-  } catch (e) {
-    console.warn("WhatsApp order notification failed:", e);
+  } catch {
+    console.warn("WhatsApp order notification: delivery failed");
   }
 }

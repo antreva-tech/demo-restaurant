@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { formatDOP } from "@/lib/money";
 import { useCart } from "./CartContext";
 import { createOnlineOrder } from "@/server/actions/online-orders";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 interface CheckoutFormProps {
   restaurantSlug: string;
@@ -32,6 +33,7 @@ export function CheckoutForm({
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
+  const turnstileToken = useRef<string | null>(null);
 
   if (cart.itemCount === 0 && status !== "success") {
     router.replace(`/r/${restaurantSlug}/l/${locationSlug}`);
@@ -55,6 +57,7 @@ export function CheckoutForm({
       customerName: name.trim(),
       customerPhone: phone.trim(),
       notes: notes.trim() || null,
+      turnstileToken: turnstileToken.current,
     });
 
     if ("ok" in result && result.ok) {
@@ -185,6 +188,14 @@ export function CheckoutForm({
           </div>
         </div>
       </section>
+
+      {/* Cloudflare Turnstile anti-bot verification (renders nothing when not configured) */}
+      <div className="mt-6">
+        <TurnstileWidget
+          onSuccess={(token) => { turnstileToken.current = token; }}
+          onExpire={() => { turnstileToken.current = null; }}
+        />
+      </div>
 
       {status === "error" && (
         <p className="mt-4 text-sm text-red-600" role="alert">
